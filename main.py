@@ -57,10 +57,11 @@ if __name__ == '__main__':
     pbar = tqdm(range(config.ITERATION), desc='Training Progress')
     for iteration in pbar:
         env.clear()
-        agent.fill_replay_buffer(env, sfc_generator, 50)
-        reward_list.append(agent.episode_reward)
+        agent.fill_replay_buffer(env, sfc_generator, 50)    # each episode contains sfc_generator.batch_size sfc
+        episode_average_reward = np.mean(agent.episode_reward_list)
+        reward_list.append(episode_average_reward)
 
-        agent.train(5, 8)
+        agent.train(5, 64)
 
         actor_loss = np.mean(agent.actor_loss_list)
         actor_loss_list.append(actor_loss)

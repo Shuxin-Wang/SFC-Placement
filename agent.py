@@ -100,7 +100,7 @@ class DDPG:
 
         self.device = device
 
-        self.episode_reward = 0
+        self.episode_reward_list = []
 
     def select_action(self, state, noise_scale=0.1, exploration=True):
         action = self.actor(state)
@@ -112,11 +112,11 @@ class DDPG:
         return action
 
     def fill_replay_buffer(self, env, sfc_generator, episode):
-        self.episode_reward = 0
+        self.episode_reward_list.clear()
         for e in range(episode):
             sfc_list = sfc_generator.get_sfc_batch()
             sfc_state_list = sfc_generator.get_sfc_states()
-            self.episode_reward = 0
+            episode_reward = 0
             for i in range(sfc_generator.batch_size):  # each episode contains batch_size sfc
                 aggregate_features = env.aggregate_features()  # get aggregated node features
                 edge_index = env.get_edge_index()
@@ -143,10 +143,9 @@ class DDPG:
                     done = torch.tensor(0, dtype=torch.float32)
 
                 self.replay_buffer.push(state, action, reward, next_state, done)
-                self.episode_reward += reward
+                episode_reward += reward
                 env.clear_sfc()
-
-            # print(f'episode {e} reward {self.episode_reward}')
+            self.episode_reward_list.append(episode_reward)
             env.clear()
 
 
