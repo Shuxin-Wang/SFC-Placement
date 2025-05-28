@@ -3,20 +3,34 @@ import torch
 import networkx as nx
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import pandas as pd
+from torch_geometric.data import Data
+import time
 import environment
 import sfc
 import config
 from agent import DDPG
 
-# cuda check
-is_cuda_available = torch.cuda.is_available()
-current_gpu_index = torch.cuda.current_device()
-current_gpu_name = torch.cuda.get_device_name(current_gpu_index)
-
-print('-' * 20 + 'CUDA info' + '-' * 20)
-print('CUDA is available:', is_cuda_available)
-print('Current GPU index:', current_gpu_index)
-print('Current GPU name:', current_gpu_name)
+def evaluate(agent, env, sfc_generator, episodes=10):
+    agent.actor.eval()
+    rewards = []
+    for _ in range(episodes):
+        env.clear()
+        sfc_list = sfc_generator.get_sfc_batch()
+        sfc_states = sfc_generator.get_sfc_states()
+        for i, sfc in enumerate(sfc_list):
+            net_state = Data(x=env.aggregate_features(), edge_index=env.edge_index())
+            sfc_state = sfc_states[i]
+            state = (net_state.to(agent.device), sfc_state.to(agent.device))
+            with torch.no_grad():
+                action = agent.select_action([state], exploration=False)
+                placement = agent.actor.get_sfc_placement(action, env.num_nodes)
+                placement = placement[0][:len(sfc)]
+                _, reward = env.step(sfc, placement)
+                rewards.append(reward)
+            env.clear_sfc()
+    agent.actor.train()
+    print('Test Average Reward:', np.mean(rewards))
 
 
 if __name__ == '__main__':
@@ -24,6 +38,8 @@ if __name__ == '__main__':
         device = torch.device('cuda')
     else:
         device = torch.device('cpu')
+
+    start_time = time.time()
 
     # initialization
     G = nx.read_graphml('Cogentco.graphml')
@@ -57,11 +73,10 @@ if __name__ == '__main__':
     pbar = tqdm(range(config.ITERATION), desc='Training Progress')
     for iteration in pbar:
         env.clear()
-        agent.fill_replay_buffer(env, sfc_generator, 50)    # each episode contains sfc_generator.batch_size sfc
-        episode_average_reward = np.mean(agent.episode_reward_list)
-        reward_list.append(episode_average_reward)
+        agent.fill_replay_buffer(env, sfc_generator, 50)
+        reward_list.append(agent.episode_reward)
 
-        agent.train(5, 64)
+        agent.train(5, 8)
 
         actor_loss = np.mean(agent.actor_loss_list)
         actor_loss_list.append(actor_loss)
@@ -83,12 +98,11 @@ if __name__ == '__main__':
         # plt.legend()
         # plt.pause(0.1)
 
-    # todo: save model
-    # torch.save(agent, 'agent.pth')
-    # load_agent = torch.load('agent.pth')
+    print('Training complete in {:.2f} seconds.'.format(time.time() - start_time))
 
     # plt.ioff()
 
+    plt.cla()
     plt.subplot(1, 3, 1)
     plt.title('Reward')
     plt.plot(reward_list, label='Reward', color='red')
@@ -100,7 +114,24 @@ if __name__ == '__main__':
     plt.plot(critic_loss_list, label='Critic Loss', color='green')
     plt.legend()
 
+    plt.savefig('result.png', dpi=300)
     plt.show()
+
+    agent.training_logs = {
+        'reward_list': reward_list,
+        'actor_loss_list': actor_loss_list,
+        'critic_loss_list': critic_loss_list
+    }
+
+    csv_file_path = 'results.csv'
+    df = pd.DataFrame({'Reward': reward_list, 'Actor Loss': actor_loss_list, 'Critic Loss': critic_loss_list})
+    df.to_csv(csv_file_path, index=True)
+    print('Results saved to {}'.format(csv_file_path))
+
+    agent_name = agent.__class__.__name__
+    file_name = agent_name + '.pth'
+    torch.save(agent, file_name)
+    print('Agent saved to {}'.format(file_name))
 
     # test
     # print(reward_list)

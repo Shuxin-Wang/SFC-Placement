@@ -59,6 +59,13 @@ class Environment:
         self.placement_reward = 0
         self.power_consumption = 0
         self.exceeded_penalty = 0
+
+        self.lambda_placement = 1
+        self.lambda_power = 1
+        self.lambda_capacity = 1.0
+        self.lambda_bandwidth = 0.01
+        self.lambda_latency = 0.1
+
         self.reward = 0
 
     # place VNF and record exceeded node capacity
@@ -145,16 +152,17 @@ class Environment:
                          * self.vnf_properties[index]['bandwidth'] \
                          / self.vnf_properties[index]['latency']
             self.placement_reward += self.vnf_placement[i] * vnf_reward
-        self.reward += self.placement_reward
 
-        # power consumption penalty
-        self.reward -= self.power_consumption
+        # print(f"SFC reward: {self.lambda_placement * self.placement_reward}, power consumption: {self.lambda_power * self.power_consumption}")
+        # print(f'exceeded capacity: {self.lambda_capacity * self.exceeded_capacity}, exceeded bandwidth: {self.lambda_bandwidth * self.exceeded_bandwidth}, exceeded latency: {self.lambda_latency * self.exceeded_latency}')
 
-        # exceeded penalty
-        self.exceeded_penalty = self.exceeded_capacity + self.exceeded_bandwidth + self.exceeded_latency
-        self.reward -= 0.1 * self.exceeded_penalty
+        self.reward = (self.lambda_placement * self.placement_reward
+                       - self.lambda_power * self.power_consumption
+                       - self.lambda_capacity * self.exceeded_capacity
+                       - self.lambda_bandwidth * self.exceeded_bandwidth
+                       - self.lambda_latency * self.exceeded_latency)
 
-        # todo: set reward factor lambda
+        # print(f'reward: {self.reward}')
 
     @staticmethod
     def link_to_index(links):
