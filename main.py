@@ -133,7 +133,3 @@ if __name__ == '__main__':
     torch.save(agent, file_name)
     print('Agent saved to {}'.format(file_name))
 
-    # test
-    # print(reward_list)
-    # print(actor_loss_list)
-    # print(critic_loss_list)
