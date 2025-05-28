@@ -74,7 +74,7 @@ if __name__ == '__main__':
     for iteration in pbar:
         env.clear()
         agent.fill_replay_buffer(env, sfc_generator, 50)
-        reward_list.append(agent.episode_reward)
+        reward_list.append(np.mean(agent.episode_reward_list))
 
         agent.train(5, 8)
 
