@@ -234,11 +234,11 @@ class Environment:
         self.compute_power(sfc, placement)
         self.compute_reward(sfc)
 
-        next_state = self.aggregate_features()
+        next_node_states = self.aggregate_features()
         # reward = torch.tensor(self.reward, dtype=torch.float32)
         reward = torch.tanh(torch.tensor(self.reward / 1e3, dtype=torch.float32))
 
-        return next_state, reward
+        return next_node_states, reward
 
     def render(self):
         # todo: show more details
