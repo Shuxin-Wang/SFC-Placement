@@ -9,7 +9,7 @@ import time
 import environment
 import sfc
 import config
-from agent import DDPG
+from agent import DDPG, NCO
 
 def evaluate(agent, env, sfc_generator, episodes=10):
     agent.actor.eval()
@@ -56,8 +56,10 @@ if __name__ == '__main__':
     state_input_dim = node_state_dim * env.num_nodes + config.MAX_SFC_LENGTH * vnf_state_dim
     state_output_dim = (env.num_nodes + config.MAX_SFC_LENGTH) * vnf_state_dim
 
-    agent = DDPG(node_state_dim, vnf_state_dim, state_output_dim,
-                      config.MAX_SFC_LENGTH, device)
+    # agent = DDPG(node_state_dim, vnf_state_dim, state_output_dim,
+    #                   config.MAX_SFC_LENGTH, device)
+
+    agent = NCO(vnf_state_dim, env.num_nodes, device)
 
     # train
 
@@ -114,7 +116,9 @@ if __name__ == '__main__':
     plt.plot(critic_loss_list, label='Critic Loss', color='green')
     plt.legend()
 
-    plt.savefig('result.png', dpi=300)
+    agent_name = agent.__class__.__name__
+    figure_name = agent_name + '_result.png'
+    plt.savefig(figure_name, dpi=300)
     plt.show()
 
     agent.training_logs = {
@@ -123,13 +127,13 @@ if __name__ == '__main__':
         'critic_loss_list': critic_loss_list
     }
 
-    csv_file_path = 'results.csv'
+    csv_file_path = agent_name + 'results.csv'
     df = pd.DataFrame({'Reward': reward_list, 'Actor Loss': actor_loss_list, 'Critic Loss': critic_loss_list})
     df.to_csv(csv_file_path, index=True)
     print('Results saved to {}'.format(csv_file_path))
 
-    agent_name = agent.__class__.__name__
-    file_name = agent_name + '.pth'
-    torch.save(agent, file_name)
-    print('Agent saved to {}'.format(file_name))
+
+    agent_file_name = agent_name + '.pth'
+    torch.save(agent, agent_file_name)
+    print('Agent saved to {}'.format(agent_file_name))
 

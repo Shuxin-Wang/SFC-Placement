@@ -334,16 +334,18 @@ class NCO(nn.Module):
             next_states = list(batch_next_states)
             dones = torch.tensor(batch_dones, dtype=torch.float32).unsqueeze(1).to(self.device)
 
-            _, probs = self.actor(states)
-            log_probs = torch.log(probs).mean(dim=1, keepdim=True)
+            _, probs = self.actor(states)   # batch_size * max_sfc_length * node_num
+            B, T, N = probs.shape
+            probs_reshaped = probs.view(B * T, N)
+
+            dist = torch.distributions.Categorical(probs_reshaped)
+            action = dist.sample()  # every action choose a node
+            log_probs = dist.log_prob(action).view(B, T).mean(dim=1, keepdim=True)
 
             with torch.no_grad():
                 baseline = self.critic(states)
             advantage = rewards - baseline
-            print(rewards.shape)
-            print(baseline.shape)
-            print(advantage.shape)
-            print(log_probs.shape)
+
             actor_loss = -(advantage * log_probs).mean()
 
             self.actor_optimizer.zero_grad()
