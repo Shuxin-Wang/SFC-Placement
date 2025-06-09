@@ -32,6 +32,7 @@ train_arg.add_argument('--episode', type=int, default=EPISODE, help='number of e
 train_arg.add_argument('--learning_rate', type=float, default=LEARNING_RATE, help='learning rate' )
 
 model_arg = parser.add_argument_group('model')
+model_arg.add_argument('--model', type=str, default='DDPG', help='agent model')
 model_arg.add_argument('--save_model', type=str2bool, default=True, help='save model')
 model_arg.add_argument('--load_model', type=str2bool, default=False, help='load model')
 model_arg.add_argument('--save_to', type=str, default='save/model', help='directory to save model')

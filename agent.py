@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from collections import deque
 import networkx as nx
+from sympy.physics.units import acceleration_due_to_gravity
 from torch.nn.functional import batch_norm
 from torch_geometric.data import Data
 import config
@@ -31,13 +32,14 @@ class ReplayBuffer:
 
 # todo: mask delivery
 class StateNetworkActor(nn.Module):
-    def __init__(self, net_state_dim, vnf_state_dim, state_dim, action_dim, hidden_dim=512):
+    def __init__(self, num_nodes, net_state_dim, vnf_state_dim, input_dim, output_dim, hidden_dim=512):
         super().__init__()
+        self.num_nodes = num_nodes
         self.state_network = StateNetwork(net_state_dim, vnf_state_dim)
-        self.l1 = nn.Linear(state_dim, hidden_dim)
+        self.l1 = nn.Linear(input_dim, hidden_dim)
         self.l2 = nn.Linear(hidden_dim, hidden_dim)
-        self.l3 = nn.Linear(hidden_dim, action_dim)
-        self.layer_norm = nn.LayerNorm(action_dim)
+        self.l3 = nn.Linear(hidden_dim, output_dim)
+        self.layer_norm = nn.LayerNorm(output_dim)
 
     def forward(self, state, mask=None):
         x = self.state_network(state, mask)
@@ -46,24 +48,8 @@ class StateNetworkActor(nn.Module):
         x = self.l2(F.relu(x))
         x = self.l3(F.relu(x))
         action = self.layer_norm(x)
+        action = action.view(action.size(0), config.MAX_SFC_LENGTH, self.num_nodes)
         return action
-
-    # convert actor action output to sfc placement
-    @staticmethod
-    def get_sfc_placement(actions, node_num):
-        # batch_size * 1 * max_sfc_length / 1 * max_sfc_length
-        min_values, _ = actions.view(actions.size(0), -1).min(dim=1)
-        max_values, _ = actions.view(actions.size(0), -1).max(dim=1)
-
-        # batch_size * 1
-        min_values = min_values.unsqueeze(1)
-        max_values = max_values.unsqueeze(1)
-
-        # batch_size * max_sfc_length
-        placement = (node_num - 1) * (actions - min_values) / (max_values - min_values + 1e-8)
-        placement = placement.round().int()
-
-        return placement
 
 class StateNetworkCritic(nn.Module):
     def __init__(self, net_state_dim, vnf_state_dim, state_dim, action_dim, hidden_dim=512):
@@ -83,9 +69,9 @@ class StateNetworkCritic(nn.Module):
         return q
 
 class DDPG:
-    def __init__(self, node_state_dim, vnf_state_dim, state_output_dim, action_dim, device='cpu'):
-        self.actor = StateNetworkActor(node_state_dim, vnf_state_dim, state_output_dim, action_dim).to(device)
-        self.target_actor = StateNetworkActor(node_state_dim, vnf_state_dim, state_output_dim, action_dim).to(device)
+    def __init__(self,num_nodes, node_state_dim, vnf_state_dim, state_output_dim, action_dim, device='cpu'):
+        self.actor = StateNetworkActor(num_nodes, node_state_dim, vnf_state_dim, state_output_dim, action_dim).to(device)
+        self.target_actor = StateNetworkActor(num_nodes, node_state_dim, vnf_state_dim, state_output_dim, action_dim).to(device)
         self.target_actor.load_state_dict(self.actor.state_dict())
         self.actor_optimizer = optim.Adam(self.actor.parameters())
 
@@ -103,14 +89,13 @@ class DDPG:
 
         self.episode_reward_list = []
 
-    def select_action(self, state, noise_scale=0.1, exploration=True):
-        action = self.actor(state)
-
+    def select_action(self, state, exploration=True):
+        logits = self.actor(state)  # batch_size * 1 * num_nodes
         if exploration:
-            noise = torch.randn_like(action) * noise_scale
-            action = action + noise
-
-        return action
+            dist = torch.distributions.Categorical(logits=logits)
+            return dist.sample()
+        else:
+            return torch.argmax(logits, dim=-1)
 
     def fill_replay_buffer(self, env, sfc_generator, episode):
         self.episode_reward_list.clear()
@@ -126,12 +111,10 @@ class DDPG:
                 state = (net_state.to(self.device), sfc_state.to(self.device))
 
                 with torch.no_grad():
-                    action = self.select_action([state]).squeeze(0)  # action_dim: max_sfc_length
+                    action = self.select_action([state])    # action_dim: max_sfc_length * num_nodes
 
-                placement = self.actor.get_sfc_placement(action.unsqueeze(0),
-                                                          env.num_nodes)  # action_dim: 1 * max_sfc_length
                 sfc = sfc_list[i]
-                placement = placement[0][:len(sfc_list[i])].squeeze(0)  # masked placement
+                placement = action[0][:len(sfc_list[i])].squeeze(0)  # masked placement
                 next_node_states, reward = env.step(sfc, placement)
 
                 if i + 1 >= sfc_generator.batch_size:
@@ -163,8 +146,8 @@ class DDPG:
             next_states = list(batch_next_states)
             dones = torch.tensor(batch_dones, dtype=torch.float32).unsqueeze(1).to(self.device)
 
-            actor_action = self.actor(states)
-            actor_loss = -self.critic(states, actor_action.detach()).mean()
+            logits = self.actor(states)
+            actor_loss = -self.critic(states, logits.detach()).mean()
             self.actor_loss_list.append(actor_loss.item())
 
             self.actor_optimizer.zero_grad()
@@ -384,9 +367,9 @@ if __name__ == '__main__':
     state_input_dim = node_state_dim * env.num_nodes + config.MAX_SFC_LENGTH * vnf_state_dim
     state_output_dim = (env.num_nodes + config.MAX_SFC_LENGTH) * vnf_state_dim
 
-    # agent = DDPG(node_state_dim, vnf_state_dim, state_output_dim,
-    #              config.MAX_SFC_LENGTH, device)
-    agent = NCO(vnf_state_dim, env.num_nodes, device)
+    agent = DDPG(env.num_nodes, node_state_dim, vnf_state_dim, state_output_dim,
+                 config.MAX_SFC_LENGTH * env.num_nodes, device)
+    # agent = NCO(vnf_state_dim, env.num_nodes, device)
 
 
     for iteration in range(config.ITERATION):

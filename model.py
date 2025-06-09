@@ -12,8 +12,9 @@ import config
 class GAT(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_heads):  # hidden_dim = N * num_heads
         super().__init__()
-        self.conv1 = GATConv(input_dim, hidden_dim, heads=num_heads)
-        self.conv2 = GATConv(hidden_dim * num_heads, output_dim, heads=1)
+        self.gat1 = GATConv(input_dim, hidden_dim, heads=num_heads)
+        self.gat2 = GATConv(hidden_dim * num_heads, output_dim, heads=1)
+        self.norm = nn.LayerNorm(output_dim)
 
     def forward(self, data):
         # data = Batch.from_data_list(net_states_list)
@@ -21,9 +22,10 @@ class GAT(nn.Module):
         x = data.x
         edge_index = data.edge_index
 
-        x = self.conv1(x, edge_index)
+        x = self.gat1(x, edge_index)
         x = F.elu(x)
-        x = self.conv2(x, edge_index)
+        x = self.gat2(x, edge_index)
+        x = self.norm(x)
         return x
 
 
@@ -95,12 +97,21 @@ class MultiheadAttention(nn.Module):
 
         return q, attention
 
+class Encoder(nn.Module):
+    def __init__(self, dim_model):
+        super().__init__()
+        self.encoder_layer = nn.TransformerEncoderLayer(d_model=dim_model, nhead=3, dim_feedforward=8, batch_first=True)
+        self.encoder = nn.TransformerEncoder(encoder_layer=self.encoder_layer, num_layers=2)
+
+    def forward(self, sfc_state):
+        return self.encoder(sfc_state)
 
 class StateNetwork(nn.Module):
     def __init__(self, net_state_dim, vnf_state_dim):
         super().__init__()
-        self.net_attention = GAT(input_dim=net_state_dim, hidden_dim=8, output_dim=3, num_heads=8)
-        self.sfc_attention = MultiheadAttention(dim_model=vnf_state_dim, dim_k=3, dim_v=3, num_heads=1)
+        self.net_attention = GAT(input_dim=net_state_dim, hidden_dim=64, output_dim=3, num_heads=8)
+        # self.sfc_attention = MultiheadAttention(dim_model=vnf_state_dim, dim_k=3, dim_v=3, num_heads=1)
+        self.sfc_attention = Encoder(dim_model=vnf_state_dim)
 
     def forward(self, state, mask=None):
         net_state, sfc_state = zip(*state)
@@ -115,7 +126,8 @@ class StateNetwork(nn.Module):
 
         batch_net_attention = self.net_attention(batch_net_state)
         batch_net_attention = batch_net_attention.view(num_nodes, batch_size, -1).transpose(0, 1)   # batch_size, num_nodes, vnf_state_dim
-        batch_sfc_attention, _ = self.sfc_attention(batch_sfc_state, batch_sfc_state, batch_sfc_state, mask=mask)
+        # batch_sfc_attention, _ = self.sfc_attention(batch_sfc_state, batch_sfc_state, batch_sfc_state, mask=mask)
+        batch_sfc_attention = self.sfc_attention(batch_sfc_state)
 
         # batch_size * (node_num + max_sfc_length) * vnf_state_dim
         batch_state = torch.cat((batch_net_attention, batch_sfc_attention), dim=1)
