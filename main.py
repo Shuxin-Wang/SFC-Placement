@@ -12,7 +12,8 @@ import config
 from agent import DDPG, NCO, EnhancedNCO
 import plot
 
-def train(agent):
+# todo: check reward
+def train(agent, env, sfc_generator):
     actor_loss_list = []
     critic_loss_list = []
     reward_list = []
@@ -76,7 +77,6 @@ def evaluate(agent, env, sfc_generator, episodes=10):
                 rewards.append(env.reward)
             env.clear_sfc()
     print(agent.__class__.__name__ + ' Test Average Reward:', np.mean(rewards))
-    print(rewards)
 
 
 if __name__ == '__main__':
@@ -104,6 +104,7 @@ if __name__ == '__main__':
 
     # input: batch_size * (num_nodes + max_sfc_length) * vnf_state_dim
     # output: batch_size * max_sfc_length * num_nodes
+
     # agent = DDPG(env.num_nodes, node_state_dim, vnf_state_dim, state_output_dim,
     #              config.MAX_SFC_LENGTH * env.num_nodes, device)
 
@@ -113,8 +114,9 @@ if __name__ == '__main__':
     #              config.MAX_SFC_LENGTH * env.num_nodes, device)
 
     # train
-    # train(agent)
+    # train(agent, env, sfc_generator)
 
+    # evaluate
     all_models = os.listdir('save/model')
     agent_files = [file for file in all_models if file.endswith('.pth')]
 
