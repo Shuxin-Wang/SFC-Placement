@@ -442,7 +442,6 @@ class EnhancedNCO(nn.Module):
 
             with torch.no_grad():
                 baseline = self.critic(states)
-                print(baseline.shape)
             rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)  # rewards normalization
             advantage = rewards - baseline
 

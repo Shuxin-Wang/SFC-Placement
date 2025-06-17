@@ -17,7 +17,7 @@ class Environment:
         self.num_links = graph.number_of_edges()
         self.num_vnf_types = config.NUM_VNF_TYPES
 
-        self.node_properties = [{'capacity': random.randint(5, 10)} for _ in range(self.num_nodes)]
+        self.node_properties = [{'capacity': random.randint(10, 20)} for _ in range(self.num_nodes)]
 
         self.links = list(graph.edges()) # match graph links to indexes
         self.link_index = self.link_to_index(self.links)  # {('node a', 'node b'): index}
@@ -36,7 +36,7 @@ class Environment:
 
         self.path_penalty = 200  # a penalty factor added to reward if there is no path found between two vnf
 
-        # update per epoch
+        # update per episode
         self.node_used = np.zeros(self.num_nodes)
         self.link_used = np.zeros(self.num_links)   # link bandwidth usage
 
@@ -155,6 +155,9 @@ class Environment:
 
         # print(f"SFC reward: {self.lambda_placement * self.placement_reward}, power consumption: {self.lambda_power * self.power_consumption}")
         # print(f'exceeded capacity: {self.lambda_capacity * self.exceeded_capacity}, exceeded bandwidth: {self.lambda_bandwidth * self.exceeded_bandwidth}, exceeded latency: {self.lambda_latency * self.exceeded_latency}')
+        self.exceeded_penalty = (self.lambda_capacity * self.exceeded_capacity
+                                 + self.lambda_bandwidth * self.exceeded_bandwidth
+                                 + self.lambda_latency * self.exceeded_latency)
 
         self.reward = (self.lambda_placement * self.placement_reward
                        - self.lambda_power * self.power_consumption

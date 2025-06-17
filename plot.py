@@ -1,12 +1,13 @@
 import matplotlib.pyplot as plt
 import os
 import pandas as pd
+import numpy as np
 
-def show_result(dir_path):
+def show_train_result(dir_path):
     all_files = os.listdir(dir_path)
     csv_files = [file for file in all_files if file.endswith('.csv')]
-    agent_name = [f.replace('.csv', '') for f in csv_files]
-    agent_num = len(agent_name)
+    agent_name_list = [f.replace('.csv', '') for f in csv_files]
+    agent_num = len(agent_name_list)
 
     df_list = []
     reward_list = []
@@ -25,7 +26,7 @@ def show_result(dir_path):
     # plt.subplot(1, 3, 1)
     plt.title('Reward')
     for i in range(agent_num):
-        plt.plot(reward_list[i], label=agent_name[i] + ' Reward')
+        plt.plot(reward_list[i], label=agent_name_list[i] + ' Reward')
     # plt.ylim((13,18))
     plt.legend()
 
@@ -33,19 +34,72 @@ def show_result(dir_path):
     # plt.subplot(1, 3, 2)
     plt.title('Actor Loss')
     for i in range(agent_num):
-        plt.plot(actor_loss_list[i], label=agent_name[i] + ' Actor Loss')
+        plt.plot(actor_loss_list[i], label=agent_name_list[i] + ' Actor Loss')
     plt.legend()
 
     plt.figure()
     # plt.subplot(1, 3, 3)
     plt.title('Critic Loss')
     for i in range(agent_num):
-        plt.plot(critic_loss_list[i], label=agent_name[i] + ' Critic Loss')
+        plt.plot(critic_loss_list[i], label=agent_name_list[i] + ' Critic Loss')
     plt.legend()
 
     figure_name = 'result.png'
     plt.savefig(figure_name, dpi=300)
     plt.show()
 
+def show_evaluate_result(dir_path):
+    all_files = os.listdir(dir_path)
+    csv_files = [file for file in all_files if file.endswith('.csv')]
+    agent_name_list = [f.replace('.csv', '') for f in csv_files]
+
+    # 加载数据
+    df_list = []
+    for csv_file in csv_files:
+        csv_file_path = dir_path + '/' + csv_file
+        df = pd.read_csv(csv_file_path)
+        df_list.append(df)
+
+    # 检查数据是否一致（假设所有CSV文件行数相同）
+    index_num = len(df_list[0]) if df_list else 0
+
+    # 设置图形参数
+    bar_width = 0.25
+    index = np.arange(index_num)   # 训练阶段的索引
+    labels = df_list[0]['Max SFC Length']
+    colors = ['#72b063', '#e29135', '#94c6cd']
+
+    for metric in df_list[0].columns.tolist()[1:]:
+        plt.figure(figsize=(10, 6))
+        for i, (df, agent_name) in enumerate(zip(df_list, agent_name_list)):
+            plt.bar(
+                index + i * bar_width,  # 并列偏移
+                df[metric],
+                width=bar_width,
+                label=agent_name,
+                color=colors[i]
+            )
+
+        # 添加数值标签
+        for i, df in enumerate(df_list):
+            for j, value in enumerate(df[metric]):
+                plt.text(
+                    j + i * bar_width,  # x位置
+                    value + (0.01 if value >= 0 else -0.01) * max(abs(df[metric])),  # y位置
+                    f'{value:.1f}',
+                    ha='center',
+                    va='bottom' if value >= 0 else 'top'
+                )
+
+        plt.xlabel('Max SFC Length', fontsize=12)
+        plt.ylabel(metric, fontsize=12)
+        plt.xticks(index + bar_width, labels=labels)
+        plt.legend()
+        plt.grid(axis='y', linestyle='--', alpha=0.3)
+        plt.tight_layout()
+
+    plt.show()
+
 if __name__ == '__main__':
-    show_result('save/result')
+    # show_train_result('save/result/train')
+    show_evaluate_result('save/result/evaluate')
