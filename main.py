@@ -88,6 +88,7 @@ def evaluate(agent, env, sfc_generator, sfc_length_list, episodes=10):
             env.clear()
             sfc_list = sfc_generator.get_sfc_batch()
             sfc_states = sfc_generator.get_sfc_states()
+            source_dest_node_pairs = sfc_generator.get_source_dest_node_pairs()
             for i, sfc in enumerate(sfc_list):
                 net_state = Data(x=env.aggregate_features(), edge_index=env.get_edge_index())
                 sfc_state = sfc_states[i]
@@ -136,7 +137,7 @@ if __name__ == '__main__':
     G = nx.read_graphml('Cogentco.graphml')
     env = environment.Environment(G)
     sfc_generator = SFCBatchGenerator(20, config.MIN_SFC_LENGTH, config.MAX_SFC_LENGTH,
-                                          config.NUM_VNF_TYPES)
+                                          config.NUM_VNF_TYPES, env.num_nodes)
 
     env.clear()
     env.get_state_dim(sfc_generator)
@@ -145,7 +146,7 @@ if __name__ == '__main__':
     vnf_state_dim = env.vnf_state_dim
     state_dim = env.state_dim
     state_input_dim = node_state_dim * env.num_nodes + config.MAX_SFC_LENGTH * vnf_state_dim
-    state_output_dim = (env.num_nodes + config.MAX_SFC_LENGTH) * vnf_state_dim
+    state_output_dim = (env.num_nodes + config.MAX_SFC_LENGTH + 2) * vnf_state_dim
 
     # input: batch_size * (num_nodes + max_sfc_length) * vnf_state_dim
     # output: batch_size * max_sfc_length * num_nodes

@@ -113,9 +113,10 @@ class StateNetwork(nn.Module):
         self.net_attention = GAT(input_dim=net_state_dim, hidden_dim=64, output_dim=4, num_heads=8)
         # self.sfc_attention = MultiheadAttention(dim_model=vnf_state_dim, dim_k=3, dim_v=3, num_heads=1)
         self.sfc_attention = Encoder(dim_model=vnf_state_dim)
+        self.node_linear = nn.Linear(1, vnf_state_dim, dtype=torch.float32)
 
     def forward(self, state, mask=None):
-        net_state, sfc_state = zip(*state)
+        net_state, sfc_state, source_dest_node_pair = zip(*state)
         net_states_list = list(net_state)
         sfc_states_list = list(sfc_state)
 
@@ -124,14 +125,16 @@ class StateNetwork(nn.Module):
 
         batch_net_state = Batch.from_data_list(net_states_list)  # net state = DataBatch(x, edge_index, batch, ptr)
         batch_sfc_state = torch.stack(sfc_states_list, dim=0)
+        batch_source_dest_node_pair = torch.stack(source_dest_node_pair, dim=0).unsqueeze(2)   # batch_size * 2 * 1
 
         batch_net_attention = self.net_attention(batch_net_state)
         batch_net_attention = batch_net_attention.view(num_nodes, batch_size, -1).transpose(0, 1)   # batch_size, num_nodes, vnf_state_dim
         # batch_sfc_attention, _ = self.sfc_attention(batch_sfc_state, batch_sfc_state, batch_sfc_state, mask=mask)
         batch_sfc_attention = self.sfc_attention(batch_sfc_state)
+        batch_node_pair = self.node_linear(batch_source_dest_node_pair)
 
-        # batch_size * (node_num + max_sfc_length) * vnf_state_dim
-        batch_state = torch.cat((batch_net_attention, batch_sfc_attention), dim=1)
+        # batch_size * (node_num + max_sfc_length + 2) * vnf_state_dim
+        batch_state = torch.cat((batch_net_attention, batch_sfc_attention, batch_node_pair), dim=1)
 
         return batch_state
 
@@ -142,9 +145,10 @@ if __name__ == '__main__':
     G = nx.read_graphml('Cogentco.graphml')
     env = Environment(G)
     sfc_generator = SFCBatchGenerator(config.BATCH_SIZE, config.MIN_SFC_LENGTH, config.MAX_SFC_LENGTH,
-                                      config.NUM_VNF_TYPES)
+                                      config.NUM_VNF_TYPES, env.num_nodes)
     sfc_generator.get_sfc_batch()
     sfc_states = sfc_generator.get_sfc_states()
+    source_dest_node_pairs = sfc_generator.get_source_dest_node_pairs()
     env.get_state_dim(sfc_generator)
 
     node_state_dim = env.node_state_dim
@@ -155,9 +159,11 @@ if __name__ == '__main__':
     edge_index = env.get_edge_index()
     net_state = Data(x=aggregate_features, edge_index=edge_index)
     state_network = StateNetwork(node_state_dim, vnf_state_dim)
-    batch_state = [(net_state, sfc_states[0]), (net_state, sfc_states[1]), (net_state, sfc_states[2])]    # net_state = Data(x=[197, 28], edge_index=[2, 486])
-    state = state_network(batch_state)
-    print(state)
+    batch_state = [(net_state, sfc_states[0], source_dest_node_pairs[0]),
+                   (net_state, sfc_states[1], source_dest_node_pairs[1]),
+                   (net_state, sfc_states[2], source_dest_node_pairs[2])]    # net_state = Data(x=[197, 28], edge_index=[2, 486])
+    state = state_network(batch_state)  # batch_size * (node_num + max_sfc_length + 2) * vnf_state_dim
+    print(state.shape)
 
     # GAT test
     # aggregate_features = env.aggregate_features()

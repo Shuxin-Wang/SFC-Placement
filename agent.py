@@ -6,9 +6,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 from collections import deque
 import networkx as nx
-from sympy.physics.units import acceleration_due_to_gravity
-from torch.nn.functional import batch_norm
-from torch.utils.benchmark import ordered_unique
 from torch_geometric.data import Data
 import config
 import environment
@@ -62,7 +59,7 @@ class StateNetworkCritic(nn.Module):
         self.l2 = nn.Linear(hidden_dim, 1)
 
     def forward(self, state, action, mask=None):
-        state = self.state_network(state, mask) # batch_size * (node_num + max_sfc_length) * vnf_state_dim
+        state = self.state_network(state, mask) # batch_size * (node_num + max_sfc_length + 2) * vnf_state_dim
         # state attention pooling
         score = self.state_linear(state)
         weight = torch.softmax(score, dim=1)
@@ -109,13 +106,15 @@ class DDPG:
         for e in range(episode):
             sfc_list = sfc_generator.get_sfc_batch()
             sfc_state_list = sfc_generator.get_sfc_states()
+            source_dest_node_pairs = sfc_generator.get_source_dest_node_pairs()
             episode_reward = 0
             for i in range(sfc_generator.batch_size):  # each episode contains batch_size sfc
                 aggregate_features = env.aggregate_features()  # get aggregated node features
                 edge_index = env.get_edge_index()
                 net_state = Data(x=aggregate_features, edge_index=edge_index)
                 sfc_state = sfc_state_list[i]
-                state = (net_state.to(self.device), sfc_state.to(self.device))
+                source_dest_node_pair = source_dest_node_pairs[i]
+                state = (net_state.to(self.device), sfc_state.to(self.device), source_dest_node_pair.to(self.device))
 
                 with torch.no_grad():
                     action = self.select_action([state])    # action_dim: max_sfc_length * num_nodes
@@ -130,7 +129,8 @@ class DDPG:
                 else:
                     next_net_state = Data(x=next_node_states, edge_index=edge_index)
                     next_sfc_state = sfc_state_list[i + 1]
-                    next_state = (next_net_state.to(self.device), next_sfc_state.to(self.device))
+                    next_source_dest_node_pair = source_dest_node_pairs[i + 1]
+                    next_state = (next_net_state.to(self.device), next_sfc_state.to(self.device), next_source_dest_node_pair.to(self.device))
                     done = torch.tensor(0, dtype=torch.float32)
 
                 self.replay_buffer.push(state, action, reward, next_state, done)
@@ -147,7 +147,7 @@ class DDPG:
 
         for e in range(episode):
             batch_states, batch_actions, batch_rewards, batch_next_states, batch_dones = zip(*self.replay_buffer.sample(batch_size))
-            states = list(batch_states)  # states = [(net_state, sfc_state), (net_state, sfc_state)...]
+            states = list(batch_states)  # states = [(net_state, sfc_state, source_dest_node_pair), (net_state, sfc_state, source_dest_node_pair)...]
             actions = torch.stack(batch_actions, dim=0).to(self.device)  # actions = torch.tensor((action), (action)...)) batch_size * max_sfc_length
             rewards = torch.tensor(batch_rewards, dtype=torch.float32).unsqueeze(1).to(self.device)
             next_states = list(batch_next_states)
@@ -190,7 +190,8 @@ class Seq2SeqActor(nn.Module):
         super().__init__()
         self.vnf_state_dim = vnf_state_dim
 
-        self.embedding = nn.Linear(vnf_state_dim, hidden_dim)   # input: batch_size * max_sfc_length * vnf_state_dim
+        self.node_linear = nn.Linear(1, vnf_state_dim)  # batch_size * 2 * vnf_state_dim
+        self.embedding = nn.Linear(vnf_state_dim, hidden_dim)   # input: batch_size * (max_sfc_length + 2) * vnf_state_dim
         self.encoder = nn.LSTM(
             input_size=hidden_dim,
             hidden_size=hidden_dim,
@@ -203,17 +204,23 @@ class Seq2SeqActor(nn.Module):
             num_layers=num_layers,
             batch_first=True
         )
-        self.fc_out = nn.Linear(hidden_dim, num_nodes)  # output: batch_size * max_sfc_length * num_nodes
+        self.fc_out = nn.Linear(hidden_dim, num_nodes)  # output: batch_size * (max_sfc_length + 2) * num_nodes
 
     def forward(self, state):
-        _, sfc_state = zip(*state)
+        _, sfc_state, source_dest_node_pair = zip(*state)
         if len(sfc_state) > 1:
             sfc_state = torch.stack(sfc_state, dim=0)
+            source_dest_node_pair = torch.stack(source_dest_node_pair, dim=0).unsqueeze(2)
+            print(source_dest_node_pair.shape)
         else:
             sfc_state = sfc_state[0].unsqueeze(0)
+            source_dest_node_pair = source_dest_node_pair[0].unsqueeze(0)
         batch_size = sfc_state.shape[0]
         sfc_state = sfc_state.view(batch_size, config.MAX_SFC_LENGTH, self.vnf_state_dim)
-        embedded = self.embedding(sfc_state)  # input: batch_size * max_sfc_length * vnf_state_dim
+        source_dest_node_pair = source_dest_node_pair.view(batch_size, 2, 1)
+        source_dest_node_pair = self.node_linear(source_dest_node_pair) # batch_size * 2 * vnf_state_dim
+        sfc = torch.cat((sfc_state, source_dest_node_pair), dim=1)   # batch_size * (max_sfc_length + 2) * vnf_state_dim
+        embedded = self.embedding(sfc)  # batch_size * max_sfc_length * vnf_state_dim
         encoder_outputs, (h, c) = self.encoder(embedded)    # output, hidden state, cell state
         decoder_outputs, _ = self.decoder(encoder_outputs, (h, c))
         logits = self.fc_out(decoder_outputs)
@@ -224,6 +231,7 @@ class ValueBaseline(nn.Module):
     def __init__(self, vnf_state_dim, hidden_dim):
         super().__init__()
         self.vnf_state_dim = vnf_state_dim
+        self.node_linear = nn.Linear(1, vnf_state_dim)
         self.embedding = nn.Linear(vnf_state_dim, hidden_dim)
         self.encoder = nn.LSTM(
             input_size=hidden_dim,
@@ -234,12 +242,16 @@ class ValueBaseline(nn.Module):
         self.fc_out = nn.Linear(hidden_dim, 1)
 
     def forward(self, state):
-        _, sfc_state = zip(*state)
+        _, sfc_state, source_dest_node_pair = zip(*state)
         if len(sfc_state) > 1:
             sfc_state = torch.stack(sfc_state, dim=0)
+            source_dest_node_pair = torch.stack(source_dest_node_pair, dim=0).unsqueeze(2)
         else:
             sfc_state = torch.tensor(sfc_state[0]).unsqueeze(0)
-        embedded = self.embedding(sfc_state)
+            source_dest_node_pair = torch.tensor(source_dest_node_pair[0]).unsqueeze(0)
+        source_dest_node_pair = self.node_linear(source_dest_node_pair)
+        sfc = torch.cat((sfc_state, source_dest_node_pair), dim=1)
+        embedded = self.embedding(sfc)
         _, (h, _) = self.encoder(embedded)
         value = self.fc_out(h[-1])
         return value    # batch_size * 1
@@ -278,13 +290,15 @@ class NCO(nn.Module):
         for e in range(episode):
             sfc_list = sfc_generator.get_sfc_batch()
             sfc_state_list = sfc_generator.get_sfc_states()
+            source_dest_node_pairs = sfc_generator.get_source_dest_node_pairs()
             episode_reward = 0
             for i in range(sfc_generator.batch_size):
                 aggregate_features = env.aggregate_features()  # get aggregated node features
                 edge_index = env.get_edge_index()
                 net_state = Data(x=aggregate_features, edge_index=edge_index)
                 sfc_state = sfc_state_list[i]
-                state = (net_state.to(self.device), sfc_state.to(self.device))
+                source_dest_node_pair = source_dest_node_pairs[i]
+                state = (net_state.to(self.device), sfc_state.to(self.device), source_dest_node_pair.to(self.device))
 
                 with torch.no_grad():
                     action = self.select_action([state])
@@ -299,7 +313,8 @@ class NCO(nn.Module):
                 else:
                     next_net_state = Data(x=next_node_states, edge_index=edge_index)
                     next_sfc_state = sfc_state_list[i + 1]
-                    next_state = (next_net_state.to(self.device), next_sfc_state.to(self.device))
+                    next_source_dest_node_pair = source_dest_node_pairs[i + 1]
+                    next_state = (next_net_state.to(self.device), next_sfc_state.to(self.device), next_source_dest_node_pair.to(self.device))
                     done = torch.tensor(0, dtype=torch.float32)
 
                 self.replay_buffer.push(state, action, reward, next_state, done)
@@ -387,13 +402,15 @@ class EnhancedNCO(nn.Module):
         for e in range(episode):
             sfc_list = sfc_generator.get_sfc_batch()
             sfc_state_list = sfc_generator.get_sfc_states()
+            source_dest_node_pairs = sfc_generator.get_source_dest_node_pairs()
             episode_reward = 0
             for i in range(sfc_generator.batch_size):
                 aggregate_features = env.aggregate_features()  # get aggregated node features
                 edge_index = env.get_edge_index()
                 net_state = Data(x=aggregate_features, edge_index=edge_index)
                 sfc_state = sfc_state_list[i]
-                state = (net_state.to(self.device), sfc_state.to(self.device))
+                source_dest_node_pair = source_dest_node_pairs[i]
+                state = (net_state.to(self.device), sfc_state.to(self.device), source_dest_node_pair.to(self.device))
 
                 with torch.no_grad():
                     action = self.select_action([state])
@@ -408,7 +425,9 @@ class EnhancedNCO(nn.Module):
                 else:
                     next_net_state = Data(x=next_node_states, edge_index=edge_index)
                     next_sfc_state = sfc_state_list[i + 1]
-                    next_state = (next_net_state.to(self.device), next_sfc_state.to(self.device))
+                    next_source_dest_node_pair = source_dest_node_pairs[i + 1]
+                    next_state = (next_net_state.to(self.device), next_sfc_state.to(self.device),
+                                  next_source_dest_node_pair.to(self.device))
                     done = torch.tensor(0, dtype=torch.float32)
 
                 self.replay_buffer.push(state, action, reward, next_state, done)
@@ -473,7 +492,7 @@ if __name__ == '__main__':
     G = nx.read_graphml('Cogentco.graphml')
     env = environment.Environment(G)
     sfc_generator = SFCBatchGenerator(20, config.MIN_SFC_LENGTH, config.MAX_SFC_LENGTH,
-                                          config.NUM_VNF_TYPES)
+                                          config.NUM_VNF_TYPES, env.num_nodes)
 
     env.clear()
     env.get_state_dim(sfc_generator)
@@ -482,11 +501,11 @@ if __name__ == '__main__':
     vnf_state_dim = env.vnf_state_dim
     state_dim = env.state_dim
     state_input_dim = node_state_dim * env.num_nodes + config.MAX_SFC_LENGTH * vnf_state_dim
-    state_output_dim = (env.num_nodes + config.MAX_SFC_LENGTH) * vnf_state_dim
+    state_output_dim = (env.num_nodes + config.MAX_SFC_LENGTH + 2) * vnf_state_dim
 
-    agent = DDPG(env.num_nodes, node_state_dim, vnf_state_dim, state_output_dim,
-                 config.MAX_SFC_LENGTH * env.num_nodes, device)
-    # agent = NCO(vnf_state_dim, env.num_nodes, device)
+    # agent = DDPG(env.num_nodes, node_state_dim, vnf_state_dim, state_output_dim,
+    #              config.MAX_SFC_LENGTH * env.num_nodes, device)
+    agent = NCO(vnf_state_dim, env.num_nodes, device)
 
 
     for iteration in range(config.ITERATION):

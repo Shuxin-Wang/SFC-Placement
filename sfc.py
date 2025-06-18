@@ -1,18 +1,22 @@
 import numpy as np
 import random
 import torch
+import networkx as nx
 import config
-from environment import VNF_SIZE, VNF_LATENCY, VNF_BANDWIDTH
+from environment import VNF_SIZE, VNF_LATENCY, VNF_BANDWIDTH, Environment
 
 class SFCBatchGenerator:
-    def __init__(self, batch_size, min_sfc_length, max_sfc_length, num_vnf_types):
+    def __init__(self, batch_size, min_sfc_length, max_sfc_length, num_vnf_types, num_nodes):
         self.batch_size = batch_size    # each episode contains batch size data
         self.min_sfc_length = min_sfc_length
         self.max_sfc_length = max_sfc_length
         self.num_vnf_types = num_vnf_types
+        self.num_nodes = num_nodes
 
         self.sfc_length = np.zeros(self.batch_size, dtype='int32')
         self.sfc = np.zeros((self.batch_size, config.MAX_SFC_LENGTH), dtype='int32')
+        self.node_list = list(range(num_nodes)) # sample source and dest node
+        self.source_dest_node_pair = np.zeros((self.batch_size, 2), dtype='int32')
         self.mask = np.zeros((self.batch_size, config.MAX_SFC_LENGTH), dtype='int32')
         self.sfc_batch_list = []
 
@@ -20,6 +24,7 @@ class SFCBatchGenerator:
     def get_sfc_batch(self):
         self.sfc.fill(0)
         self.sfc_length.fill(0)
+        self.source_dest_node_pair.fill(0)
         self.mask.fill(0)
         self.sfc_batch_list.clear()
 
@@ -30,6 +35,10 @@ class SFCBatchGenerator:
                 vnf_type = random.randint(1, self.num_vnf_types)    # vnf type = 0 means empty
                 self.sfc[batch][i] = vnf_type
                 self.mask[batch][i] = 1
+
+        for batch in range(self.batch_size):
+            source_node, dest_node = random.sample(self.node_list, 2)
+            self.source_dest_node_pair[batch] = [source_node, dest_node]
 
         # return sfc batch list with mask(dynamic length)
         for batch in range(self.batch_size):
@@ -61,8 +70,8 @@ class SFCBatchGenerator:
         sfc_states = torch.tensor(sfc_states, dtype=torch.float32)
         return sfc_states
 
-    def get_sfc_masks(self):
-        return self.mask
+    def get_source_dest_node_pairs(self):
+        return torch.tensor(self.source_dest_node_pair, dtype=torch.float32)
 
     # generate qos vector according to vnf type
     @staticmethod
@@ -76,9 +85,10 @@ class SFCBatchGenerator:
 if __name__ == '__main__':
 
     random.seed(27)
-    # sfc_generator = SFCBatchGenerator(config.BATCH_SIZE, config.MIN_SFC_LENGTH, config.MAX_SFC_LENGTH, config.NUM_VNF_TYPES)
-    sfc_generator = SFCBatchGenerator(config.BATCH_SIZE, config.MIN_SFC_LENGTH, 10,
-                                      config.NUM_VNF_TYPES)
+    G = nx.read_graphml('Cogentco.graphml')
+    env = Environment(G)
+    sfc_generator = SFCBatchGenerator(config.BATCH_SIZE, config.MIN_SFC_LENGTH, config.MAX_SFC_LENGTH, config.NUM_VNF_TYPES, env.num_nodes)
+
     sfc_generator.get_sfc_batch()
     # sfc_generator.show_sfc_batch()
 

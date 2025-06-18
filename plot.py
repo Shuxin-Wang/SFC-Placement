@@ -53,19 +53,18 @@ def show_evaluate_result(dir_path):
     csv_files = [file for file in all_files if file.endswith('.csv')]
     agent_name_list = [f.replace('.csv', '') for f in csv_files]
 
-    # 加载数据
+    # load csv files
     df_list = []
     for csv_file in csv_files:
         csv_file_path = dir_path + '/' + csv_file
         df = pd.read_csv(csv_file_path)
         df_list.append(df)
 
-    # 检查数据是否一致（假设所有CSV文件行数相同）
+    # row number in csv files
     index_num = len(df_list[0]) if df_list else 0
 
-    # 设置图形参数
     bar_width = 0.25
-    index = np.arange(index_num)   # 训练阶段的索引
+    index = np.arange(index_num)    # bar location
     labels = df_list[0]['Max SFC Length']
     colors = ['#72b063', '#e29135', '#94c6cd']
 
@@ -73,19 +72,19 @@ def show_evaluate_result(dir_path):
         plt.figure(figsize=(10, 6))
         for i, (df, agent_name) in enumerate(zip(df_list, agent_name_list)):
             plt.bar(
-                index + i * bar_width,  # 并列偏移
+                index + i * bar_width,  # bar offset
                 df[metric],
                 width=bar_width,
                 label=agent_name,
                 color=colors[i]
             )
 
-        # 添加数值标签
+        # add data text
         for i, df in enumerate(df_list):
             for j, value in enumerate(df[metric]):
                 plt.text(
-                    j + i * bar_width,  # x位置
-                    value + (0.01 if value >= 0 else -0.01) * max(abs(df[metric])),  # y位置
+                    j + i * bar_width,  # x
+                    value + (0.01 if value >= 0 else -0.01) * max(abs(df[metric])),  # y
                     f'{value:.1f}',
                     ha='center',
                     va='bottom' if value >= 0 else 'top'
