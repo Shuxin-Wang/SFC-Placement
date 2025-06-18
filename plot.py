@@ -44,8 +44,8 @@ def show_train_result(dir_path):
         plt.plot(critic_loss_list[i], label=agent_name_list[i] + ' Critic Loss')
     plt.legend()
 
-    figure_name = 'result.png'
-    plt.savefig(figure_name, dpi=300)
+    # figure_name = 'result.png'
+    # plt.savefig(figure_name, dpi=300)
     plt.show()
 
 def show_evaluate_result(dir_path):
@@ -100,5 +100,5 @@ def show_evaluate_result(dir_path):
     plt.show()
 
 if __name__ == '__main__':
-    # show_train_result('save/result/train')
-    show_evaluate_result('save/result/evaluate')
+    show_train_result('save/result/train')
+    # show_evaluate_result('save/result/evaluate')

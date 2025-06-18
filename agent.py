@@ -119,7 +119,7 @@ class DDPG:
                 with torch.no_grad():
                     action = self.select_action([state])    # action_dim: max_sfc_length * num_nodes
 
-                sfc = sfc_list[i]
+                sfc = source_dest_node_pair.tolist() + sfc_list[i]
                 placement = action[0][:len(sfc_list[i])].squeeze(0)  # masked placement
                 next_node_states, reward = env.step(sfc, placement)
 
@@ -211,7 +211,6 @@ class Seq2SeqActor(nn.Module):
         if len(sfc_state) > 1:
             sfc_state = torch.stack(sfc_state, dim=0)
             source_dest_node_pair = torch.stack(source_dest_node_pair, dim=0).unsqueeze(2)
-            print(source_dest_node_pair.shape)
         else:
             sfc_state = sfc_state[0].unsqueeze(0)
             source_dest_node_pair = source_dest_node_pair[0].unsqueeze(0)
@@ -304,7 +303,7 @@ class NCO(nn.Module):
                     action = self.select_action([state])
 
                 placement = action[0][:len(sfc_list[i])].squeeze(0)   # masked placement
-                sfc = sfc_list[i]
+                sfc = source_dest_node_pair.int().tolist() + sfc_list[i]
                 next_node_states, reward = env.step(sfc, placement)
 
                 if i + 1 >= sfc_generator.batch_size:
@@ -416,7 +415,7 @@ class EnhancedNCO(nn.Module):
                     action = self.select_action([state])
 
                 placement = action[0][:len(sfc_list[i])].squeeze(0)   # masked placement
-                sfc = sfc_list[i]
+                sfc = source_dest_node_pair.tolist() + sfc_list[i]
                 next_node_states, reward = env.step(sfc, placement)
 
                 if i + 1 >= sfc_generator.batch_size:

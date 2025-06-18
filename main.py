@@ -7,11 +7,9 @@ import os
 from torch_geometric.data import Data
 import time
 import environment
-import main
 from sfc import SFCBatchGenerator
 import config
 from agent import DDPG, NCO, EnhancedNCO
-import plot
 
 def train(agent, env, sfc_generator):
     actor_loss_list = []
@@ -89,13 +87,15 @@ def evaluate(agent, env, sfc_generator, sfc_length_list, episodes=10):
             sfc_list = sfc_generator.get_sfc_batch()
             sfc_states = sfc_generator.get_sfc_states()
             source_dest_node_pairs = sfc_generator.get_source_dest_node_pairs()
-            for i, sfc in enumerate(sfc_list):
+            for i in range(sfc_generator.batch_size):
                 net_state = Data(x=env.aggregate_features(), edge_index=env.get_edge_index())
                 sfc_state = sfc_states[i]
-                state = (net_state.to(agent.device), sfc_state.to(agent.device))
+                source_dest_node_pair = source_dest_node_pairs[i]
+                state = (net_state.to(agent.device), sfc_state.to(agent.device), source_dest_node_pair.to(device))
                 with torch.no_grad():
                     action = agent.select_action([state], exploration=False)
                     placement = action[0][:len(sfc_list[i])].squeeze(0)
+                    sfc = source_dest_node_pair.tolist() + sfc_list[i]
                     env.step(sfc, placement)
                     placement_reward_list.append(env.placement_reward)
                     power_consumption_list.append(env.power_consumption)
@@ -136,7 +136,7 @@ if __name__ == '__main__':
     # initialization
     G = nx.read_graphml('Cogentco.graphml')
     env = environment.Environment(G)
-    sfc_generator = SFCBatchGenerator(20, config.MIN_SFC_LENGTH, config.MAX_SFC_LENGTH,
+    sfc_generator = SFCBatchGenerator(config.BATCH_SIZE, config.MIN_SFC_LENGTH, config.MAX_SFC_LENGTH,
                                           config.NUM_VNF_TYPES, env.num_nodes)
 
     env.clear()
@@ -159,7 +159,7 @@ if __name__ == '__main__':
     #     DDPG(env.num_nodes, node_state_dim, vnf_state_dim, state_output_dim,
     #          config.MAX_SFC_LENGTH * env.num_nodes, device)
     # ]
-
+    #
     # for agent in agent_list:
     #     train(agent, env, sfc_generator)
 
@@ -167,7 +167,7 @@ if __name__ == '__main__':
     all_models = os.listdir('save/model')
     agent_files = [file for file in all_models if file.endswith('.pth')]
 
-    sfc_length_list = [8, 10, 12]   # test agent placement under different max sfc length
+    sfc_length_list = [8, 10, 12, 14,16]   # test agent placement under different max sfc length
     for agent_file in agent_files:
         agent_file_path = 'save/model/' + agent_file
         agent = torch.load(agent_file_path, weights_only=False)

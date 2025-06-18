@@ -88,10 +88,13 @@ class Environment:
             return False
 
     # determine sfc path
-    def find_sfc_path(self, placement):
+    def find_sfc_path(self, source_dest_node_pair, placement):
+        source_node, dest_node = source_dest_node_pair[0], source_dest_node_pair[1]
+        self.sfc_path.append(self.find_route(source_node, placement[0]))    # source node -> vnf 0
         for i in range(len(placement) - 1):
             route = self.find_route(placement[i], placement[i + 1])
             self.sfc_path.append(route)
+        self.sfc_path.append(self.find_route(placement[-1], dest_node)) # vnf N -> dest node
 
     # compute node exceeded capacity, + for reward and - for penalty
     def compute_capacity(self, placement):
@@ -225,11 +228,14 @@ class Environment:
         self.state_dim = (self.num_nodes + config.MAX_SFC_LENGTH) * self.vnf_state_dim
 
     def step(self, sfc, placement):
+        source_dest_node_pair = torch.tensor(sfc[:2], dtype=torch.int32)
+        sfc = sfc[2:]
+
         self.clear_sfc()
 
         self.vnf_placement = np.zeros(len(sfc), dtype='int32')
         self.place_vnf(sfc, placement)
-        self.find_sfc_path(placement)
+        self.find_sfc_path(source_dest_node_pair, placement)
 
         self.compute_capacity(placement)
         self.compute_latency(self.sfc_path, sfc)
@@ -300,7 +306,7 @@ if __name__ == '__main__':
 
     # env test
     test_placement = torch.tensor([0, 0, 2, 4], dtype=torch.int32)
-    test_sfc = [1, 3, 5, 7]
+    test_sfc = torch.tensor([0, 27] + [1, 3, 5, 7])
     test_path = [['0'], ['0', '9', '8', '7', '6', '4', '3', '77', '2'], ['2', '77', '3', '4']]
 
     env.clear()
