@@ -509,7 +509,6 @@ class DDPG:
                 action = self.select_action(probs)    # action_dim: batch_size * max_sfc_length * num_nodes
                 placement = torch.argmax(action, dim=-1)    # batch_size * max_sfc_length
                 placement = placement[0][:len(sfc_list[i])].squeeze(0).to(dtype=torch.int32).tolist()  # masked placement
-                print('buffer', placement)
                 sfc = source_dest_node_pair.to(dtype=torch.int32).tolist() + sfc_list[i]
                 next_node_states, reward = env.step(sfc, placement)
 
