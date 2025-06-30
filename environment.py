@@ -61,10 +61,10 @@ class Environment:
         self.exceeded_penalty = 0
 
         self.lambda_placement = 1
-        self.lambda_power = 1
-        self.lambda_capacity = 1.0
+        self.lambda_power = 0.25
+        self.lambda_capacity = 0.25
         self.lambda_bandwidth = 0.01
-        self.lambda_latency = 0.1
+        self.lambda_latency = 0.01
 
         self.reward = 0
 
@@ -156,6 +156,9 @@ class Environment:
                          / self.vnf_properties[index]['latency']
             self.placement_reward += self.vnf_placement[i] * vnf_reward
 
+        if len(sfc) == sum(self.vnf_placement):
+            self.placement_reward += 500
+
         # print(f"SFC reward: {self.lambda_placement * self.placement_reward}, power consumption: {self.lambda_power * self.power_consumption}")
         # print(f'exceeded capacity: {self.lambda_capacity * self.exceeded_capacity}, exceeded bandwidth: {self.lambda_bandwidth * self.exceeded_bandwidth}, exceeded latency: {self.lambda_latency * self.exceeded_latency}')
         self.exceeded_penalty = (self.lambda_capacity * self.exceeded_capacity
@@ -167,8 +170,6 @@ class Environment:
                        - self.lambda_capacity * self.exceeded_capacity
                        - self.lambda_bandwidth * self.exceeded_bandwidth
                        - self.lambda_latency * self.exceeded_latency)
-
-        # print(f'reward: {self.reward}')
 
     @staticmethod
     def link_to_index(links):
