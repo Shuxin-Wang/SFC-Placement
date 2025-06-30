@@ -1,10 +1,9 @@
 import matplotlib.pyplot as plt
-import os
 import pandas as pd
 import numpy as np
+import seaborn as sns
 
-def show_train_result(dir_path):
-    agent_name_list = ['NCO', 'DRLSFCP', 'ActorEnhancedNCO', 'DDPG']
+def show_train_result(dir_path, agent_name_list):
     agent_num = len(agent_name_list)
 
     df_list = []
@@ -21,33 +20,35 @@ def show_train_result(dir_path):
         critic_loss_list.append(df['Critic Loss'])
 
     figure_path = 'save/result/plot/'
-    colors = ['#925eb0', '#e29135', '#cc7c71', '#72b063', '#cc7c71']
+    colors = ['#cc7c71', '#925eb0', '#72b063', '#719aac', '#e29135']
+    steps = range(len(actor_loss_list[0]))
+    window_size = 10
 
-    plt.figure()
-    plt.title('Reward')
+    # Actor Loss
+    plt.figure(figsize=(10, 6))
     for i in range(agent_num):
-        plt.plot(reward_list[i], label=agent_name_list[i] + ' Reward', color=colors[i])
+        df = pd.DataFrame({'Steps': steps, 'Actor Loss': actor_loss_list[i]})
+        df['Smoothed Actor Loss'] = df['Actor Loss'].rolling(window=window_size, center=True).mean()
+        sns.lineplot(data=df, x='Steps', y='Actor Loss', color=colors[i], alpha=0.2, label=agent_name_list[i] + ' Actor Loss')
+        sns.lineplot(data=df, x='Steps', y='Smoothed Actor Loss', color=colors[i], label=agent_name_list[i] + ' Smoothed Actor Loss')
+    plt.title('Actor Training Loss Curve with Smoothing')
     plt.legend()
-    plt.savefig(figure_path + 'Actor Loss.png', dpi=300)
 
-    plt.figure()
-    plt.title('Actor Loss')
+    # Critic Loss
+    plt.figure(figsize=(10, 6))
     for i in range(agent_num):
-        plt.plot(actor_loss_list[i], label=agent_name_list[i] + ' Actor Loss', color=colors[i])
+        df = pd.DataFrame({'Steps': steps, 'Critic Loss': critic_loss_list[i]})
+        df['Smoothed Critic Loss'] = df['Critic Loss'].rolling(window=window_size, center=True).mean()
+        sns.lineplot(data=df, x='Steps', y='Critic Loss', color=colors[i], alpha=0.2,
+                     label=agent_name_list[i] + ' Critic Loss')
+        sns.lineplot(data=df, x='Steps', y='Smoothed Critic Loss', color=colors[i],
+                     label=agent_name_list[i] + ' Smoothed Critic Loss')
+    plt.title('Critic Training Loss Curve with Smoothing')
     plt.legend()
-    plt.savefig(figure_path + 'Actor Loss.png', dpi=300)
-
-    plt.figure()
-    plt.title('Critic Loss')
-    for i in range(agent_num):
-        plt.plot(critic_loss_list[i], label=agent_name_list[i] + ' Critic Loss', color=colors[i])
-    plt.legend()
-    plt.savefig(figure_path + 'Critic Loss.png', dpi=300)
 
     plt.show()
 
-def show_evaluate_result(dir_path):
-    agent_name_list = ['NCO', 'DRLSFCP', 'ActorEnhancedNCO', 'DDPG']
+def show_evaluate_result(dir_path, agent_name_list):
 
     # load csv files
     df_list = []
@@ -62,7 +63,7 @@ def show_evaluate_result(dir_path):
     bar_width = 0.2
     index = np.arange(index_num)    # bar location
     labels = df_list[0]['Max SFC Length']
-    colors = ['#925eb0', '#e29135', '#94c6cd', '#72b063', '#cc7c71']
+    colors = ['#925eb0', '#e29135', '#72b063', '#94c6cd', '#cc7c71']
 
     figure_path = 'save/result/plot/'
 
@@ -99,5 +100,12 @@ def show_evaluate_result(dir_path):
     plt.show()
 
 if __name__ == '__main__':
-    show_train_result('save/result/train')
-    # show_evaluate_result('save/result/evaluate')
+    agent_name_list = [
+        'NCO',
+        'DRLSFCP',
+        'ActorEnhancedNCO',
+        # 'CriticEnhancedNCO',
+        'DDPG'
+        ]
+    # show_train_result('save/result/train', agent_name_list)
+    show_evaluate_result('save/result/evaluate', agent_name_list)
