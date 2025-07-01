@@ -89,6 +89,7 @@ def evaluate(agent, env, sfc_generator, sfc_length_list, episodes=10):
     pbar = tqdm(sfc_length_list, desc='Evaluation Progress')
 
     for sfc_length in pbar:
+        env.clear()
         sfc_generator.max_sfc_length = sfc_length
         for _ in range(episodes):
             agent.test(env, sfc_generator)
@@ -97,11 +98,18 @@ def evaluate(agent, env, sfc_generator, sfc_length_list, episodes=10):
             exceeded_penalty_list.append(np.mean(env.exceeded_penalty_list))
             reward_list.append(np.mean(env.reward_list))
             acceptance_ratio_list.append(env.sfc_placed_num / sfc_generator.batch_size)
+
         avg_placement_reward_list.append(np.mean(placement_reward_list))    # iteration avg reward
         avg_power_consumption_list.append(np.mean(power_consumption_list))
         avg_exceeded_penalty_list.append(np.mean(exceeded_penalty_list))
         avg_reward_list.append(np.mean(reward_list))
         avg_acceptance_ratio_list.append(np.mean(acceptance_ratio_list))
+
+        placement_reward_list.clear()
+        power_consumption_list.clear()
+        exceeded_penalty_list.clear()
+        reward_list.clear()
+        acceptance_ratio_list.clear()
 
     evaluation_time = time.time() - start_time
     print('Evaluation complete in {:.2f} seconds.'.format(evaluation_time))
@@ -143,13 +151,13 @@ if __name__ == '__main__':
 
     # train
     agent_list = [
-        # NCO(vnf_state_dim, env.num_nodes, device),
+        NCO(vnf_state_dim, env.num_nodes, device),
         # ActorEnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, state_output_dim,
         #                 config.MAX_SFC_LENGTH * env.num_nodes, device),
         # CriticEnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, device),
         # DDPG(env.num_nodes, node_state_dim, vnf_state_dim, state_output_dim,
         #      config.MAX_SFC_LENGTH * env.num_nodes, device),
-        DRLSFCP(node_state_dim, vnf_state_dim, device=device)
+        # DRLSFCP(node_state_dim, vnf_state_dim, device=device)
     ]
 
     # for agent in agent_list:
@@ -158,11 +166,11 @@ if __name__ == '__main__':
     # evaluate
     agent_path = 'save/model/'
     agent_name_list = [
-        # 'NCO',
+        'NCO',
         'DRLSFCP',
-        # 'ActorEnhancedNCO',
+        'ActorEnhancedNCO',
         # 'CriticEnhancedNCO',
-        # 'DDPG'
+        'DDPG'
         ]
 
     sfc_length_list = [8, 10, 12, 16, 20, 24]   # test agent placement under different max sfc length

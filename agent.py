@@ -63,6 +63,7 @@ class NCO(nn.Module):
         return placement
 
     def fill_replay_buffer(self, env, sfc_generator, episode):
+        env.clear()
         for e in range(episode):
             sfc_list = sfc_generator.get_sfc_batch()
             sfc_state_list = sfc_generator.get_sfc_states()
@@ -160,7 +161,6 @@ class NCO(nn.Module):
             placement = action[0][:len(sfc_list[i])].squeeze(0).to(dtype=torch.int32).tolist()  # masked placement
             sfc = source_dest_node_pair.to(dtype=torch.int32).tolist() + sfc_list[i]
             _, reward = env.step(sfc, placement)
-            env.sfc_placed_num += (len(sfc_list[i]) == sum(env.vnf_placement))
             self.episode_reward += reward
             env.clear_sfc()
 
@@ -297,7 +297,6 @@ class ActorEnhancedNCO(nn.Module):
             placement = action[0][:len(sfc_list[i])].squeeze(0).to(dtype=torch.int32).tolist()  # masked placement
             sfc = source_dest_node_pair.to(dtype=torch.int32).tolist() + sfc_list[i]
             _, reward = env.step(sfc, placement)
-            env.sfc_placed_num += (len(sfc_list[i]) == sum(env.vnf_placement))
             self.episode_reward += reward
             env.clear_sfc()
 
@@ -327,7 +326,7 @@ class CriticEnhancedNCO(nn.Module):
             action = torch.argmax(probs_noised, dim=-1)
         else:
             action = torch.argmax(probs, dim=-1)
-        return action
+        return action.to(dtype=torch.float32)
 
     def get_sfc_placement(self, state, exploration=False):
         _, probs = self.actor([state])
@@ -353,8 +352,7 @@ class CriticEnhancedNCO(nn.Module):
                     _, probs = self.actor([state])
 
                 action = self.select_action(probs)
-                placement = torch.argmax(action, dim=-1)
-                placement = placement[0][:len(sfc_list[i])].squeeze(0).to(dtype=torch.int32).tolist()  # masked placement
+                placement = action[0][:len(sfc_list[i])].squeeze(0).to(dtype=torch.int32).tolist()  # masked placement
                 sfc = source_dest_node_pair.to(dtype=torch.int32).tolist() + sfc_list[i]
                 next_node_states, reward = env.step(sfc, placement)
 
@@ -398,7 +396,7 @@ class CriticEnhancedNCO(nn.Module):
 
             logits, _ = self.actor(states)   # batch_size * max_sfc_length * node_num
             log_probs = F.log_softmax(logits, dim=-1)
-            log_pi_action = log_probs.gather(dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)  # get the log probs for the actions: batch_size * max_sfc_length
+            log_pi_action = log_probs.gather(dim=-1, index=actions.to(dtype=torch.int64).unsqueeze(-1)).squeeze(-1)  # get the log probs for the actions: batch_size * max_sfc_length
 
             with torch.no_grad():
                 baseline = self.critic(states, actions)
@@ -444,7 +442,6 @@ class CriticEnhancedNCO(nn.Module):
             placement = placement[0][:len(sfc_list[i])].squeeze(0).to(dtype=torch.int32).tolist()  # masked placement
             sfc = source_dest_node_pair.to(dtype=torch.int32).tolist() + sfc_list[i]
             _, reward = env.step(sfc, placement)
-            env.sfc_placed_num += (len(sfc_list[i]) == sum(env.vnf_placement))
             self.episode_reward += reward
             env.clear_sfc()
 
@@ -588,7 +585,6 @@ class DDPG:
             placement = placement[0][:len(sfc_list[i])].squeeze(0).to(dtype=torch.int32).tolist()   # masked placement
             sfc = source_dest_node_pair.to(dtype=torch.int32).tolist() + sfc_list[i]
             _, reward = env.step(sfc, placement)
-            env.sfc_placed_num += (len(sfc_list[i]) == sum(env.vnf_placement))
             self.episode_reward += reward
             env.clear_sfc()
 
@@ -627,6 +623,7 @@ class DRLSFCP:
         return placement
 
     def fill_replay_buffer(self, env, sfc_generator, episode):
+        env.clear()
         for e in range(episode):
             sfc_list = sfc_generator.get_sfc_batch()
             sfc_state_list = sfc_generator.get_sfc_states()
@@ -727,7 +724,6 @@ class DRLSFCP:
             placement = action[0][:len(sfc_list[i])].squeeze(0).to(dtype=torch.int32).tolist()  # masked placement
             sfc = source_dest_node_pair.to(dtype=torch.int32).tolist() + sfc_list[i]
             _, reward = env.step(sfc, placement)
-            env.sfc_placed_num += (len(sfc_list[i]) == sum(env.vnf_placement))
             self.episode_reward += reward
             env.clear_sfc()
 

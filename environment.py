@@ -17,7 +17,7 @@ class Environment:
         self.num_links = graph.number_of_edges()
         self.num_vnf_types = config.NUM_VNF_TYPES
 
-        self.node_properties = [{'capacity': random.randint(20, 50)} for _ in range(self.num_nodes)]
+        self.node_properties = [{'capacity': random.randint(5, 10)} for _ in range(self.num_nodes)]
 
         self.links = list(graph.edges()) # match graph links to indexes
         self.link_index = self.link_to_index(self.links)  # {('node a', 'node b'): index}
@@ -62,8 +62,8 @@ class Environment:
         self.reward = 0
         self.sfc_placed_num = 0
 
-        self.lambda_placement = 50
-        self.lambda_power = 0.25
+        self.lambda_placement = 10
+        self.lambda_power = 1
         self.lambda_capacity = 0.25
         self.lambda_bandwidth = 0.01
         self.lambda_latency = 0.01
@@ -164,6 +164,7 @@ class Environment:
 
         if len(sfc) == sum(self.vnf_placement):
             self.placement_reward = self.placement_reward * 2
+            self.sfc_placed_num += 1
 
         self.placement_reward = self.lambda_placement * self.placement_reward
 

@@ -46,6 +46,17 @@ def show_train_result(dir_path, agent_name_list):
     plt.title('Critic Training Loss Curve with Smoothing')
     plt.legend()
 
+    plt.figure(figsize=(10, 6))
+    for i in range(agent_num):
+        df = pd.DataFrame({'Steps': steps, 'Reward': reward_list[i]})
+        df['Smoothed Reward'] = df['Reward'].rolling(window=window_size, center=True).mean()
+        sns.lineplot(data=df, x='Steps', y='Reward', color=colors[i], alpha=0.2,
+                     label=agent_name_list[i] + ' Reward')
+        sns.lineplot(data=df, x='Steps', y='Smoothed Reward', color=colors[i],
+                     label=agent_name_list[i] + ' Smoothed Reward')
+    plt.title('Reward Curve with Smoothing')
+    plt.legend()
+
     plt.show()
 
 def show_evaluate_result(dir_path, agent_name_list):
@@ -102,10 +113,10 @@ def show_evaluate_result(dir_path, agent_name_list):
 if __name__ == '__main__':
     agent_name_list = [
         'NCO',
-        'DRLSFCP',
-        'ActorEnhancedNCO',
+        # 'DRLSFCP',
+        # 'ActorEnhancedNCO',
         # 'CriticEnhancedNCO',
-        'DDPG'
+        # 'DDPG'
         ]
-    # show_train_result('save/result/train', agent_name_list)
+    show_train_result('save/result/train', agent_name_list)
     show_evaluate_result('save/result/evaluate', agent_name_list)
