@@ -12,7 +12,7 @@ from sfc import SFCBatchGenerator
 import config
 from agent import NCO, ActorEnhancedNCO, CriticEnhancedNCO, DDPG, DRLSFCP
 
-def train(agent, env, sfc_generator):
+def train(agent, env, sfc_generator, iteration):
     actor_loss_list = []
     critic_loss_list = []
     reward_list = []
@@ -21,13 +21,13 @@ def train(agent, env, sfc_generator):
 
     tqdm.write('-' * 20 + agent_name + ' Training Start' + '-' * 20 + '\t')
 
-    pbar = tqdm(range(config.ITERATION), desc='Training Progress')
+    pbar = tqdm(range(iteration), desc='Training Progress')
 
     start_time = time.time()
     for _ in pbar:
-        agent.fill_replay_buffer(env, sfc_generator, 50)    # fill replay buffer with 50 * config.BATCH_SIZE data
+        agent.fill_replay_buffer(env, sfc_generator, 5)    # fill replay buffer with 50 * config.BATCH_SIZE data
 
-        agent.train(10, 100)  # episode * batch_size, update parameters for episode times per batch size
+        agent.train(10, 10)  # episode * batch_size, update parameters for episode times per batch size
         actor_loss_list.extend(agent.actor_loss_list)
         critic_loss_list.extend(agent.critic_loss_list)
 
@@ -67,7 +67,7 @@ def train(agent, env, sfc_generator):
     print('Agent saved to {}'.format(agent_file_path))
 
 
-def evaluate(agent, env, sfc_generator, sfc_length_list, episodes=100):
+def evaluate(agent, env, sfc_generator, sfc_length_list, episodes=10):
     agent_name = agent.__class__.__name__
     agent.actor.eval()
 
@@ -75,6 +75,7 @@ def evaluate(agent, env, sfc_generator, sfc_length_list, episodes=100):
     power_consumption_list = []
     exceeded_penalty_list = []
     reward_list = []
+    acceptance_ratio_list = []
 
     avg_placement_reward_list = []
     avg_power_consumption_list = []
@@ -84,40 +85,23 @@ def evaluate(agent, env, sfc_generator, sfc_length_list, episodes=100):
 
     print('-' * 20 + agent_name + ' Evaluation Start' + '-' * 20)
     start_time = time.time()
-    for sfc_length in sfc_length_list:
-        sfc_generator.max_sfc_length = sfc_length
-        placement_reward_list.clear()
-        power_consumption_list.clear()
-        exceeded_penalty_list.clear()
-        reward_list.clear()
-        sfc_placed = 0  # record the number of successfully placed sfc
-        for _ in range(episodes):
-            env.clear()
-            sfc_list = sfc_generator.get_sfc_batch()
-            sfc_states = sfc_generator.get_sfc_states()
-            source_dest_node_pairs = sfc_generator.get_source_dest_node_pairs()
-            for i in range(sfc_generator.batch_size):
-                net_state = Data(x=env.aggregate_features(), edge_index=env.get_edge_index())
-                sfc_state = sfc_states[i]
-                source_dest_node_pair = source_dest_node_pairs[i]
-                state = (net_state.to(agent.device), sfc_state.to(agent.device), source_dest_node_pair.to(device))
-                with torch.no_grad():
-                    placement = agent.get_sfc_placement(state, exploration=False)
-                    placement = placement[0][:len(sfc_list[i])].squeeze(0).to(dtype=torch.int32).tolist()  # masked placement
-                    sfc = source_dest_node_pair.to(dtype=torch.int32).tolist() + sfc_list[i]
-                env.step(sfc, placement)
-                placement_reward_list.append(env.lambda_placement * env.placement_reward)
-                power_consumption_list.append(env.lambda_power * env.power_consumption)
-                exceeded_penalty_list.append(env.exceeded_penalty)
-                reward_list.append(env.reward)
-                sfc_placed += (len(sfc_list[i]) == sum(env.vnf_placement))
-                env.clear_sfc()
 
-        avg_placement_reward_list.append(np.mean(placement_reward_list))
+    pbar = tqdm(sfc_length_list, desc='Evaluation Progress')
+
+    for sfc_length in pbar:
+        sfc_generator.max_sfc_length = sfc_length
+        for _ in range(episodes):
+            agent.test(env, sfc_generator)
+            placement_reward_list.append(np.mean(env.placement_reward_list))    # episode avg reward
+            power_consumption_list.append(np.mean(env.power_consumption_list))
+            exceeded_penalty_list.append(np.mean(env.exceeded_penalty_list))
+            reward_list.append(np.mean(env.reward_list))
+            acceptance_ratio_list.append(env.sfc_placed_num / sfc_generator.batch_size)
+        avg_placement_reward_list.append(np.mean(placement_reward_list))    # iteration avg reward
         avg_power_consumption_list.append(np.mean(power_consumption_list))
         avg_exceeded_penalty_list.append(np.mean(exceeded_penalty_list))
         avg_reward_list.append(np.mean(reward_list))
-        avg_acceptance_ratio_list.append(sfc_placed / episodes / sfc_generator.batch_size)
+        avg_acceptance_ratio_list.append(np.mean(acceptance_ratio_list))
 
     evaluation_time = time.time() - start_time
     print('Evaluation complete in {:.2f} seconds.'.format(evaluation_time))
@@ -160,25 +144,25 @@ if __name__ == '__main__':
     # train
     agent_list = [
         # NCO(vnf_state_dim, env.num_nodes, device),
-        ActorEnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, state_output_dim,
-                        config.MAX_SFC_LENGTH * env.num_nodes, device),
+        # ActorEnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, state_output_dim,
+        #                 config.MAX_SFC_LENGTH * env.num_nodes, device),
         # CriticEnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, device),
         # DDPG(env.num_nodes, node_state_dim, vnf_state_dim, state_output_dim,
         #      config.MAX_SFC_LENGTH * env.num_nodes, device),
-        # DRLSFCP(node_state_dim, vnf_state_dim, device=device)
+        DRLSFCP(node_state_dim, vnf_state_dim, device=device)
     ]
 
     # for agent in agent_list:
-    #     train(agent, env, sfc_generator)
+    #     train(agent, env, sfc_generator, iteration=config.ITERATION)
 
     # evaluate
     agent_path = 'save/model/'
     agent_name_list = [
-        'NCO',
-        # 'DRLSFCP',
+        # 'NCO',
+        'DRLSFCP',
         # 'ActorEnhancedNCO',
         # 'CriticEnhancedNCO',
-        'DDPG'
+        # 'DDPG'
         ]
 
     sfc_length_list = [8, 10, 12, 16, 20, 24]   # test agent placement under different max sfc length
