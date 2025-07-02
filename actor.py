@@ -2,28 +2,22 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.data import Batch
-from module import StateNetwork, GCNConvNet, Attention, Encoder
+from module import StateNetwork, GCNConvNet, Attention, Encoder, TransformerEncoder
 import config
 
-# todo: mask delivery
 class StateNetworkActor(nn.Module):
-    def __init__(self, num_nodes, net_state_dim, vnf_state_dim, input_dim, output_dim, hidden_dim=512):
+    def __init__(self, num_nodes, net_state_dim, vnf_state_dim):
         super().__init__()
         self.num_nodes = num_nodes
         self.state_network = StateNetwork(net_state_dim, vnf_state_dim)
-        self.l1 = nn.Linear(input_dim, hidden_dim)
-        self.l2 = nn.Linear(hidden_dim, hidden_dim)
-        self.l3 = nn.Linear(hidden_dim, output_dim)
-        self.layer_norm = nn.LayerNorm(output_dim)
+        # self.state_l1 = nn.Linear(num_nodes + config.MAX_SFC_LENGTH + 2, hidden_dim)
+        # self.node_fc = nn.Linear(input_dim, output_dim)
 
     def forward(self, state, mask=None):
-        x = self.state_network(state, mask)
-        x = torch.flatten(x, start_dim=1)
-        x = self.l1(x)
-        x = self.l2(F.relu(x))
-        x = self.l3(F.relu(x))
-        logits = self.layer_norm(x)
-        logits = logits.view(logits.size(0), config.MAX_SFC_LENGTH, self.num_nodes)
+        state_attention = self.state_network(state, mask)
+        net_tokens = state_attention[:, :self.num_nodes, :] # batch_size * num_nodes * vnf_state_dim
+        sfc_tokens = state_attention[:, self.num_nodes:, :] # batch_size * max_sfc_length * vnf_state_dim
+        logits = torch.matmul(sfc_tokens, net_tokens.transpose(1, 2))
         probs = F.softmax(logits, dim=-1)
         return logits, probs
 
