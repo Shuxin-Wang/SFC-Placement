@@ -17,7 +17,7 @@ class Environment:
         self.num_links = graph.number_of_edges()
         self.num_vnf_types = config.NUM_VNF_TYPES
 
-        self.node_properties = [{'capacity': random.randint(20, 50)} for _ in range(self.num_nodes)]
+        self.node_properties = [{'capacity': random.randint(5, 10)} for _ in range(self.num_nodes)]
 
         self.links = list(graph.edges()) # match graph links to indexes
         self.link_index = self.link_to_index(self.links)  # {('node a', 'node b'): index}
