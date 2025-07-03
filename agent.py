@@ -163,7 +163,7 @@ class NCO(nn.Module):
             env.clear_sfc()
 
 class EnhancedNCO(nn.Module):
-    def __init__(self, num_nodes, node_state_dim, vnf_state_dim, state_output_dim, action_dim, device='cpu'):
+    def __init__(self, num_nodes, node_state_dim, vnf_state_dim, device='cpu'):
         super().__init__()
 
         self.actor = StateNetworkActor(num_nodes, node_state_dim, vnf_state_dim).to(device)
@@ -296,10 +296,10 @@ class EnhancedNCO(nn.Module):
             env.clear_sfc()
 
 class ActorEnhancedNCO(nn.Module):
-    def __init__(self, num_nodes, node_state_dim, vnf_state_dim, state_output_dim, action_dim, device='cpu'):
+    def __init__(self, num_nodes, node_state_dim, vnf_state_dim, device='cpu'):
         super().__init__()
 
-        self.actor = StateNetworkActor(num_nodes, node_state_dim, vnf_state_dim, state_output_dim, action_dim).to(device)
+        self.actor = StateNetworkActor(num_nodes, node_state_dim, vnf_state_dim).to(device)
         self.critic = LSTMCritic(vnf_state_dim, hidden_dim=8).to(device)
 
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=1e-4)
@@ -571,9 +571,9 @@ class CriticEnhancedNCO(nn.Module):
             env.clear_sfc()
 
 class DDPG:
-    def __init__(self,num_nodes, node_state_dim, vnf_state_dim, state_output_dim, action_dim, device='cpu'):
-        self.actor = StateNetworkActor(num_nodes, node_state_dim, vnf_state_dim, state_output_dim, action_dim).to(device)
-        self.target_actor = StateNetworkActor(num_nodes, node_state_dim, vnf_state_dim, state_output_dim, action_dim).to(device)
+    def __init__(self,num_nodes, node_state_dim, vnf_state_dim, device='cpu'):
+        self.actor = StateNetworkActor(num_nodes, node_state_dim, vnf_state_dim).to(device)
+        self.target_actor = StateNetworkActor(num_nodes, node_state_dim, vnf_state_dim).to(device)
         self.target_actor.load_state_dict(self.actor.state_dict())
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=1e-4)
 

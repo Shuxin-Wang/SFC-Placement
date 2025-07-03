@@ -30,7 +30,10 @@ def train(agent, env, sfc_generator, iteration):
         actor_loss_list.extend(agent.actor_loss_list)
         critic_loss_list.extend(agent.critic_loss_list)
 
-        agent.test(env, sfc_generator)
+        sfc_list = sfc_generator.get_sfc_batch()
+        sfc_state_list = sfc_generator.get_sfc_states()
+        source_dest_node_pairs = sfc_generator.get_source_dest_node_pairs()
+        agent.test(env, sfc_list, sfc_state_list, source_dest_node_pairs)
         reward_list.append(agent.episode_reward)
 
         pbar.set_postfix({
@@ -162,14 +165,11 @@ if __name__ == '__main__':
 
     # train
     agent_list = [
-        # NCO(vnf_state_dim, env.num_nodes, device),
-        # ActorEnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, vnf_state_dim,
-        #                 env.num_nodes, device),
-        EnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, vnf_state_dim,
-                         env.num_nodes, device),
+        NCO(vnf_state_dim, env.num_nodes, device),
+        ActorEnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, device),
+        EnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, device),
         # CriticEnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, device),
-        # DDPG(env.num_nodes, node_state_dim, vnf_state_dim, state_output_dim,
-        #      config.MAX_SFC_LENGTH * env.num_nodes, device),
+        DDPG(env.num_nodes, node_state_dim, vnf_state_dim, device),
         # DRLSFCP(node_state_dim, vnf_state_dim, device=device)
     ]
 
@@ -184,10 +184,10 @@ if __name__ == '__main__':
         'ActorEnhancedNCO',
         # 'CriticEnhancedNCO',
         'EnhancedNCO',
-        'DDPG'
+        # 'DDPG'
         ]
     sfc_length_list = [8, 10, 12, 16, 20, 24]   # test agent placement under different max sfc length
-    evaluate(agent_name_list, env, sfc_generator, sfc_length_list, episodes=5)
+    evaluate(agent_name_list, env, sfc_generator, sfc_length_list, episodes=50)
 
-    # plot.show_train_result('save/result/train', agent_name_list)
+    plot.show_train_result('save/result/train', agent_name_list)
     plot.show_evaluate_result('save/result/evaluate', agent_name_list)
