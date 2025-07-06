@@ -60,12 +60,9 @@ class SFCBatchGenerator:
         for i in range(self.batch_size):
             sfc = self.sfc[i]
             sfc_list = []
-            position = 1
             for vnf in sfc:
                 qos = self.vnf_type_to_qos(vnf)
-                qos.append(position)    # position embedding
                 sfc_list.append(qos)
-                position += 1
             sfc_states.append(sfc_list)
         sfc_states = torch.tensor(sfc_states, dtype=torch.float32)
         return sfc_states
