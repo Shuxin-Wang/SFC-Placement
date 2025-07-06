@@ -170,6 +170,14 @@ class Environment:
         if len(sfc) == sum(self.vnf_placement):
             self.placement_reward = self.placement_reward * 2
             self.sfc_placed_num += 1
+            bonus_factor = 0
+            if self.exceeded_capacity < 0:
+                bonus_factor += 1
+            if self.exceeded_latency < 0:
+                bonus_factor += 1
+            if self.exceeded_bandwidth < 0:
+                bonus_factor += 1
+            self.placement_reward = self.placement_reward * (1 + bonus_factor)
 
         self.placement_reward = self.lambda_placement * self.placement_reward
 
