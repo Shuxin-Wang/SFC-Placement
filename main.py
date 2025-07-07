@@ -1,3 +1,5 @@
+import random
+
 import numpy as np
 import torch
 import networkx as nx
@@ -9,12 +11,13 @@ import plot
 import environment
 from sfc import SFCBatchGenerator
 import config
-from agent import NCO, ActorEnhancedNCO, CriticEnhancedNCO, DDPG, DRLSFCP, EnhancedNCO
+from agent import NCO, DDPG, DRLSFCP, EnhancedNCO, PPO
 
 def train(agent, env, sfc_generator, iteration):
     actor_loss_list = []
     critic_loss_list = []
     reward_list = []
+    avg_acceptance_ratio_list = []
 
     loss_threshold = 1e-3
     window_size = 20
@@ -27,9 +30,10 @@ def train(agent, env, sfc_generator, iteration):
 
     start_time = time.time()
     for e in pbar:
-        avg_episode_reward = agent.fill_replay_buffer(env, sfc_generator, 10)    # fill replay buffer with n * config.BATCH_SIZE data
-        agent.train(1, batch_size=200)  # episode * batch_size, update parameters for episode times per batch size
+        avg_episode_reward, avg_acceptance_ratio = agent.fill_replay_buffer(env, sfc_generator, 10)    # fill replay buffer with n * config.BATCH_SIZE data
+        agent.train()  # episode * batch_size, update parameters for episode times per batch size
         reward_list.append(avg_episode_reward)
+        avg_acceptance_ratio_list.append(avg_acceptance_ratio)
         actor_loss_list.extend(agent.actor_loss_list)
         critic_loss_list.extend(agent.critic_loss_list)
 
@@ -43,7 +47,8 @@ def train(agent, env, sfc_generator, iteration):
         pbar.set_postfix({
             'Actor Loss': np.mean(agent.actor_loss_list),
             'Critic Loss': np.mean(agent.critic_loss_list),
-            'Episode Reward': avg_episode_reward
+            'Avg Episode Reward': avg_episode_reward,
+            'Avg Acceptance Ratio': avg_acceptance_ratio
         })
 
     training_time = time.time() - start_time
@@ -52,6 +57,7 @@ def train(agent, env, sfc_generator, iteration):
     # fill list to same length
     list_length = len(actor_loss_list)
     reward_list += [np.nan] * (list_length - len(reward_list))
+    avg_acceptance_ratio_list += [np.nan] * (list_length - len(avg_acceptance_ratio_list))
     training_time_list = [training_time] + [np.nan] * (list_length - 1)
 
     agent.training_logs = {
@@ -62,7 +68,7 @@ def train(agent, env, sfc_generator, iteration):
     }
 
     csv_file_path = 'save/result/train/' + agent_name + '.csv'
-    df = pd.DataFrame({'Reward': reward_list, 'Actor Loss': actor_loss_list, 'Critic Loss': critic_loss_list, 'Training Time': training_time_list})
+    df = pd.DataFrame({'Reward': reward_list, 'Acceptance Ratio': avg_acceptance_ratio_list ,'Actor Loss': actor_loss_list, 'Critic Loss': critic_loss_list, 'Training Time': training_time_list})
     os.makedirs(os.path.dirname(csv_file_path), exist_ok=True)
     df.to_csv(csv_file_path, index=True)
     print('Training results saved to {}'.format(csv_file_path))
@@ -106,12 +112,12 @@ def evaluate(agent_path, agent_name_list, env, sfc_generator, sfc_length_list, e
             sfc_state_list = sfc_generator.get_sfc_states()
             source_dest_node_pairs = sfc_generator.get_source_dest_node_pairs()
             for agent in agent_dict.values():
-                agent.test(env, sfc_list, sfc_state_list, source_dest_node_pairs)
+                avg_episode_reward, avg_acceptance_ratio = agent.test(env, sfc_list, sfc_state_list, source_dest_node_pairs)
                 agent.placement_reward_list.append(np.mean(env.placement_reward_list))    # episode avg reward
                 agent.power_consumption_list.append(np.mean(env.power_consumption_list))
                 agent.exceeded_penalty_list.append(np.mean(env.exceeded_penalty_list))
-                agent.reward_list.append(np.mean(env.reward_list))
-                agent.acceptance_ratio_list.append(env.sfc_placed_num / sfc_generator.batch_size)
+                agent.reward_list.append(avg_episode_reward)
+                agent.acceptance_ratio_list.append(avg_acceptance_ratio)
 
         for agent in agent_dict.values():
             agent.avg_placement_reward_list.append(np.mean(agent.placement_reward_list))    # iteration avg reward
@@ -138,7 +144,7 @@ def evaluate(agent_path, agent_name_list, env, sfc_generator, sfc_length_list, e
             'Average Placement Reward': agent.avg_placement_reward_list,
             'Average Power Consumption': agent.avg_power_consumption_list,
             'Average Exceeded Penalty': agent.avg_exceeded_penalty_list,
-            'Average Reward': agent.avg_reward_list,
+            'Average Episode Reward': agent.avg_reward_list,
             'Average Acceptance Ratio': agent.avg_acceptance_ratio_list
         })
         df.to_csv(csv_file_path, index=False)
@@ -169,11 +175,10 @@ if __name__ == '__main__':
     # train
     agent_list = [
         NCO(vnf_state_dim, env.num_nodes, device),
-        # ActorEnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, device),
         EnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, device),
-        # CriticEnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, device),
+        PPO(env.num_nodes, node_state_dim, vnf_state_dim, device),
         # DDPG(env.num_nodes, node_state_dim, vnf_state_dim, device),
-        # DRLSFCP(node_state_dim, vnf_state_dim, device=device)
+        # DRLSFCP(env.num_nodes, node_state_dim, vnf_state_dim, device=device)
     ]
 
     for agent in agent_list:
@@ -184,9 +189,8 @@ if __name__ == '__main__':
     agent_name_list = [
         'NCO',
         'EnhancedNCO',
+        'PPO',
         # 'DRLSFCP',
-        # 'ActorEnhancedNCO',
-        # 'CriticEnhancedNCO',
         # 'DDPG'
         ]
     sfc_length_list = [8, 10, 12, 16, 20, 24]   # test agent placement under different max sfc length

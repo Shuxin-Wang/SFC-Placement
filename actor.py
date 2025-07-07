@@ -69,23 +69,27 @@ class Seq2SeqActor(nn.Module):
         return logits, probs
 
 class DecoderActor(nn.Module):
-    def __init__(self, net_state_dim, vnf_state_dim, embedding_dim=64):
+    def __init__(self,num_nodes, net_state_dim, vnf_state_dim, embedding_dim=64):
         super().__init__()
         self.vnf_state_dim = vnf_state_dim
-        self.node_linear = nn.Linear(1, vnf_state_dim)  # source_dest_node_pair, batch_size * 2 * vnf_state_dim
+        self.node_embed = nn.Embedding(num_nodes, vnf_state_dim)
         self.encoder = Encoder(vnf_state_dim, embedding_dim=embedding_dim)  # sfc_state
+
+        self.att = Attention(embedding_dim) # placement
         self.gcn = GCNConvNet(net_state_dim, embedding_dim) # net_state
         self.mlp = nn.Sequential(
             nn.Linear(embedding_dim, 1),
             nn.Flatten()
         )   # net_state
-        self.att = Attention(embedding_dim) # placement
         self.gru = nn.GRU(embedding_dim, embedding_dim) # decoder
 
     def forward(self, state):
         net_state, sfc_state, source_dest_node_pair = zip(*state)
         net_state_list = list(net_state)
         batch_net_state = Batch.from_data_list(net_state_list)
+
+        net_state = self.gcn(batch_net_state)
+        net_state = net_state.reshape(len(state), -1, net_state.shape[-1])  # batch_size * num_nodes * embedding_dim
 
         if len(sfc_state) > 1:
             sfc_state = torch.stack(sfc_state, dim=0)
@@ -96,34 +100,32 @@ class DecoderActor(nn.Module):
 
         batch_size = sfc_state.shape[0]
         sfc_state = sfc_state.view(batch_size, config.MAX_SFC_LENGTH, self.vnf_state_dim)
-        source_dest_node_pair = source_dest_node_pair.view(batch_size, 2, 1)
-        source_dest_node_pair = self.node_linear(source_dest_node_pair)
+        source_dest_node_pair = source_dest_node_pair.view(batch_size, 2)
+        source_dest_node_pair = self.node_embed(source_dest_node_pair.to(torch.long))  # batch_size * 2 * vnf_state_dim
 
-        net_state = self.gcn(batch_net_state)
         encoder_input = torch.cat((sfc_state, source_dest_node_pair), dim=1)    # batch_size * (max_sfc_length + 2) * vnf_state_dim
         encoder_output, encoder_hidden_state = self.encoder(encoder_input)  # (max_sfc_length + 2) * batch_size * embedding_dim, 1 * batch_size * embedding_dim
-
-        hidden_state = encoder_hidden_state
+        hidden_state = encoder_hidden_state.permute(1, 0, 2) # batch_size * 1 * embedding_dim
 
         placement_logits_list = []
 
-        query = hidden_state[-1].unsqueeze(1)   # batch_size * 1 * embedding_dim
-        seq_len = encoder_output.size(0)
-
         for t in range(config.MAX_SFC_LENGTH):
-            repeated_query = query.expand(-1, seq_len, -1)  # batch_size * seq_len * embedding_dim
-            context, attn = self.att(repeated_query, encoder_output)    # context: batch_size * 1 * embedding_dim
-            gru_input = context.permute(1, 0, 2)    # 1 * batch_size * embedding_dim
+            p_node_id = torch.full((batch_size,), t, dtype=torch.long, device=sfc_state.device)  # [B]
+            p_node_emb = self.node_embed(p_node_id).unsqueeze(0)
 
-            output, hidden_state = self.gru(gru_input, hidden_state)    # 1 * batch_size * embedding_dim
+            mask = torch.zeros(batch_size, encoder_output.size(0), dtype=torch.bool, device=sfc_state.device)
+
+            context, _ = self.att(hidden_state, encoder_output.permute(1, 0, 2), mask)    # context: batch_size * 1 * embedding_dim
+            context = context.unsqueeze(0)
+
+            output, hidden_state = self.gru(p_node_emb, hidden_state.permute(1, 0, 2))    # 1 * batch_size * embedding_dim
+            hidden_state = hidden_state.permute(1, 0, 2)
 
             decoder_output = output.squeeze(0)  # batch_size * embedding_dim
+            fused = net_state + decoder_output.unsqueeze(1) # batch_size * num_nodes * embedding_dim
 
-            scores = torch.matmul(net_state, decoder_output.t())    # num_nodes * batch_size
-            scores = scores.permute(1, 0)   # batch_size * num_nodes
-            placement_logits_list.append(scores)
-
-            query = output.permute(1, 0, 2) # batch_size * 1 * embedding_dim
+            logits = self.mlp(fused)    # batch_size * num_nodes
+            placement_logits_list.append(logits)
 
         all_logits = torch.stack(placement_logits_list, dim=1)  # batch_size * max_sfc_length * num_nodes
         all_probs = F.softmax(all_logits, dim=-1)

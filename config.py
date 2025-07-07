@@ -2,7 +2,7 @@ import argparse
 
 # default parameters
 BATCH_SIZE = 20
-ITERATION = 5000
+ITERATION = 500
 EPISODE = 10
 LEARNING_RATE = 0.001
 

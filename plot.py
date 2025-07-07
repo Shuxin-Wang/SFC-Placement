@@ -29,7 +29,7 @@ def show_train_result(dir_path, agent_name_list):
     for i in range(agent_num):
         df = pd.DataFrame({'Steps': steps, 'Actor Loss': actor_loss_list[i]})
         df['Smoothed Actor Loss'] = df['Actor Loss'].rolling(window=window_size, center=True).mean()
-        # sns.lineplot(data=df, x='Steps', y='Actor Loss', color=colors[i], alpha=0.2, label=agent_name_list[i] + ' Actor Loss')
+        sns.lineplot(data=df, x='Steps', y='Actor Loss', color=colors[i], alpha=0.2, label=agent_name_list[i] + ' Actor Loss')
         sns.lineplot(data=df, x='Steps', y='Smoothed Actor Loss', color=colors[i], label=agent_name_list[i] + ' Smoothed Actor Loss')
     plt.title('Actor Training Loss Curve with Smoothing')
     plt.legend()
@@ -39,8 +39,8 @@ def show_train_result(dir_path, agent_name_list):
     for i in range(agent_num):
         df = pd.DataFrame({'Steps': steps, 'Critic Loss': critic_loss_list[i]})
         df['Smoothed Critic Loss'] = df['Critic Loss'].rolling(window=window_size, center=True).mean()
-        # sns.lineplot(data=df, x='Steps', y='Critic Loss', color=colors[i], alpha=0.2,
-        #              label=agent_name_list[i] + ' Critic Loss')
+        sns.lineplot(data=df, x='Steps', y='Critic Loss', color=colors[i], alpha=0.2,
+                     label=agent_name_list[i] + ' Critic Loss')
         sns.lineplot(data=df, x='Steps', y='Smoothed Critic Loss', color=colors[i],
                      label=agent_name_list[i] + ' Smoothed Critic Loss')
     plt.title('Critic Training Loss Curve with Smoothing')
@@ -113,11 +113,10 @@ def show_evaluate_result(dir_path, agent_name_list):
 if __name__ == '__main__':
     agent_name_list = [
         'NCO',
-        # 'DRLSFCP',
-        # 'ActorEnhancedNCO',
-        # 'CriticEnhancedNCO',
         'EnhancedNCO',
+        'PPO',
+        # 'DRLSFCP',
         # 'DDPG'
         ]
-    # show_train_result('save/result/train', agent_name_list)
+    show_train_result('save/result/train', agent_name_list)
     show_evaluate_result('save/result/evaluate', agent_name_list)
