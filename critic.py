@@ -92,18 +92,18 @@ class LSTMCritic(nn.Module):
 class DecoderCritic(nn.Module):
     def __init__(self,num_nodes, net_state_dim, vnf_state_dim, embedding_dim=64):
         super().__init__()
+        super().__init__()
         self.vnf_state_dim = vnf_state_dim
         self.node_embed = nn.Embedding(num_nodes, vnf_state_dim)
         self.encoder = Encoder(vnf_state_dim, embedding_dim=embedding_dim)  # sfc_state
 
         self.att = Attention(embedding_dim) # placement
         self.gcn = GCNConvNet(net_state_dim, embedding_dim) # net_state
-        self.mlp = nn.Sequential(
-            nn.Linear(embedding_dim, 1),
-            nn.Flatten()
-        )   # net_state
+        self.mlp = nn.Linear(embedding_dim, config.MAX_SFC_LENGTH)
         self.gru = nn.GRU(embedding_dim, embedding_dim) # decoder
         self.fc = nn.Linear(num_nodes, 1)
+
+        self._last_hidden_state = None
 
     def forward(self, state):
         net_state, sfc_state, source_dest_node_pair = zip(*state)
@@ -124,32 +124,22 @@ class DecoderCritic(nn.Module):
         sfc_state = sfc_state.view(batch_size, config.MAX_SFC_LENGTH, self.vnf_state_dim)
         source_dest_node_pair = source_dest_node_pair.view(batch_size, 2)
         source_dest_node_pair = self.node_embed(source_dest_node_pair.to(torch.long))  # batch_size * 2 * vnf_state_dim
+        sfc = torch.cat((sfc_state, source_dest_node_pair), dim=1)  # batch_size * (max_sfc_length + 2) * vnf_state_dim
 
-        encoder_input = torch.cat((sfc_state, source_dest_node_pair), dim=1)    # batch_size * (max_sfc_length + 2) * vnf_state_dim
-        encoder_output, encoder_hidden_state = self.encoder(encoder_input)  # (max_sfc_length + 2) * batch_size * embedding_dim, 1 * batch_size * embedding_dim
-        hidden_state = encoder_hidden_state.permute(1, 0, 2) # batch_size * 1 * embedding_dim
+        encoder_output, encoder_hidden_state = self.encoder(
+            sfc)  # (max_sfc_length + 2) * batch_size * embedding_dim, 1 * batch_size * embedding_dim
 
-        placement_logits_list = []
+        if self._last_hidden_state is not None:
+            net_state = net_state + self._last_hidden_state.permute(1, 0, 2)
+            context, attention = self.att(self._last_hidden_state, encoder_output)
+            gru_output, hidden_state = self.gru(encoder_output, self._last_hidden_state)
+        else:
+            net_state = net_state + encoder_hidden_state.permute(1, 0, 2)
+            context, attention = self.att(encoder_hidden_state, encoder_output)
+            gru_output, hidden_state = self.gru(encoder_output, encoder_hidden_state)
 
-        for t in range(config.MAX_SFC_LENGTH):
-            p_node_id = torch.full((batch_size,), t, dtype=torch.long, device=sfc_state.device)  # [B]
-            p_node_emb = self.node_embed(p_node_id).unsqueeze(0)
+        self._last_hidden_state = hidden_state
 
-            mask = torch.zeros(batch_size, encoder_output.size(0), dtype=torch.bool, device=sfc_state.device)
-            context, _ = self.att(hidden_state, encoder_output.permute(1, 0, 2), mask)    # context: batch_size * 1 * embedding_dim
-            context = context.unsqueeze(0)
-
-            output, hidden_state = self.gru(p_node_emb, hidden_state.permute(1, 0, 2))    # 1 * batch_size * embedding_dim
-            hidden_state = hidden_state.permute(1, 0, 2)
-
-            decoder_output = output.squeeze(0)  # batch_size * embedding_dim
-            fused = net_state + decoder_output.unsqueeze(1) # batch_size * num_nodes * embedding_dim
-
-            logits = self.mlp(fused)    # batch_size * num_nodes
-            placement_logits_list.append(logits)
-
-        all_logits = torch.stack(placement_logits_list, dim=1)  # batch_size * max_sfc_length * num_nodes
-
-        value = self.fc(all_logits) # batch_size * max_sfc_length * 1
-        value = torch.mean(value, dim=-1, keepdim=True)    # batch_size * 1
+        logits = self.mlp(net_state).permute(0, 2, 1)  # batch_size * max_sfc_length * num_nodes
+        value = torch.mean(logits.sum(dim=-1), dim=-1, keepdim=True)
         return value

@@ -19,9 +19,6 @@ def train(agent, env, sfc_generator, iteration):
     reward_list = []
     avg_acceptance_ratio_list = []
 
-    loss_threshold = 1e-3
-    window_size = 20
-
     agent_name = agent.__class__.__name__
 
     tqdm.write('-' * 20 + agent_name + ' Training Start' + '-' * 20 + '\t')
@@ -36,13 +33,6 @@ def train(agent, env, sfc_generator, iteration):
         avg_acceptance_ratio_list.append(avg_acceptance_ratio)
         actor_loss_list.extend(agent.actor_loss_list)
         critic_loss_list.extend(agent.critic_loss_list)
-
-        if len(actor_loss_list) >= window_size:
-            actor_var = torch.var(torch.tensor(actor_loss_list[-window_size:]))
-            critic_var = torch.var(torch.tensor(critic_loss_list[-window_size:]))
-            if actor_var < loss_threshold and critic_var < loss_threshold:
-                print(f"Early stop triggered at epoch {e} (losses stable)")
-                break
 
         pbar.set_postfix({
             'Actor Loss': np.mean(agent.actor_loss_list),
@@ -178,7 +168,7 @@ if __name__ == '__main__':
         EnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, device),
         PPO(env.num_nodes, node_state_dim, vnf_state_dim, device),
         # DDPG(env.num_nodes, node_state_dim, vnf_state_dim, device),
-        # DRLSFCP(env.num_nodes, node_state_dim, vnf_state_dim, device=device)
+        DRLSFCP(env.num_nodes, node_state_dim, vnf_state_dim, device=device)
     ]
 
     for agent in agent_list:
@@ -189,12 +179,12 @@ if __name__ == '__main__':
     agent_name_list = [
         'NCO',
         'EnhancedNCO',
+        'DRLSFCP',
         'PPO',
-        # 'DRLSFCP',
         # 'DDPG'
         ]
     sfc_length_list = [8, 10, 12, 16, 20, 24]   # test agent placement under different max sfc length
-    evaluate(agent_path, agent_name_list, env, sfc_generator, sfc_length_list, episodes=10)
+    evaluate(agent_path, agent_name_list, env, sfc_generator, sfc_length_list, episodes=500)
 
     plot.show_train_result('save/result/train', agent_name_list)
     plot.show_evaluate_result('save/result/evaluate', agent_name_list)

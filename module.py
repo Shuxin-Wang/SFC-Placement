@@ -15,7 +15,6 @@ class GAT(nn.Module):
         super().__init__()
         self.gat1 = GATConv(input_dim, hidden_dim, heads=num_heads)
         self.gat2 = GATConv(hidden_dim * num_heads, output_dim, heads=1)
-        self.norm = nn.LayerNorm(output_dim)
 
     def forward(self, data):
         # data = Batch.from_data_list(net_states_list)
@@ -26,7 +25,6 @@ class GAT(nn.Module):
         x = self.gat1(x, edge_index)
         x = F.elu(x)
         x = self.gat2(x, edge_index)
-        x = self.norm(x)
         return x
 
 class ScaledDotProductAttention(nn.Module):
@@ -105,61 +103,26 @@ class TransformerEncoder(nn.Module):
     def forward(self, sfc_state, src_key_padding_mask=None):
         return self.encoder(sfc_state, src_key_padding_mask=src_key_padding_mask)
 
-class StateNetworkOriginal(nn.Module):
-    def __init__(self, net_state_dim, vnf_state_dim):
-        super().__init__()
-        self.net_attention = GAT(input_dim=net_state_dim, hidden_dim=64, output_dim=4, num_heads=8)
-        # self.sfc_attention = MultiheadAttention(dim_model=vnf_state_dim, dim_k=3, dim_v=3, num_heads=1)
-        self.sfc_attention = TransformerEncoder(dim_model=vnf_state_dim)
-        self.node_linear = nn.Linear(1, vnf_state_dim, dtype=torch.float32)
-        self.sfc_linear = nn.Linear(config.MAX_SFC_LENGTH + 2, config.MAX_SFC_LENGTH)
-
-    def forward(self, state, mask=None):
-        net_state, sfc_state, source_dest_node_pair = zip(*state)
-        net_states_list = list(net_state)
-        sfc_states_list = list(sfc_state)
-
-        batch_size = len(net_states_list)
-        num_nodes = len(net_states_list[0].x)
-
-        batch_net_state = Batch.from_data_list(net_states_list)  # net state = DataBatch(x, edge_index, batch, ptr)
-        batch_sfc_state = torch.stack(sfc_states_list, dim=0)
-        batch_source_dest_node_pair = torch.stack(source_dest_node_pair, dim=0).unsqueeze(2)   # batch_size * 2 * 1
-
-        batch_net_attention = self.net_attention(batch_net_state)
-        batch_net_attention = batch_net_attention.view(batch_size, num_nodes, -1)   # batch_size, num_nodes, vnf_state_dim
-
-        batch_node_pair = self.node_linear(batch_source_dest_node_pair) # batch_size * 2 * vnf_state_dim
-        batch_sfc = torch.cat((batch_sfc_state, batch_node_pair), dim=1)
-        batch_sfc_attention = self.sfc_attention(batch_sfc).transpose(1, 2) # batch_size * vnf_state_dim * max_sfc_length
-        batch_sfc_attention = self.sfc_linear(batch_sfc_attention).transpose(1, 2)  # batch_size * max_sfc_length * vnf_state_dim
-
-        # batch_size * (node_num + max_sfc_length) * vnf_state_dim
-        batch_state = torch.cat((batch_net_attention, batch_sfc_attention), dim=1)
-        return batch_state
-
 class StateNetwork(nn.Module):
     def __init__(self,num_nodes, net_state_dim, vnf_state_dim, hidden_dim=64):
         super().__init__()
         self.net_state_dim = net_state_dim
-        self.net_attention = GAT(input_dim=net_state_dim, hidden_dim=hidden_dim, output_dim=4, num_heads=8)
-        # self.sfc_attention = MultiheadAttention(dim_model=vnf_state_dim, dim_k=3, dim_v=3, num_heads=1)
         self.sfc_attention = TransformerEncoder(dim_model=hidden_dim)
         self.pos_embed = nn.Embedding(config.MAX_SFC_LENGTH + 2, hidden_dim)
-        self.sfc_proj = nn.Linear(vnf_state_dim, hidden_dim)
-        self.net_linear = nn.Linear(net_state_dim, hidden_dim)
+        self.sfc_linear = nn.Linear(vnf_state_dim, hidden_dim)
+        self.net_linear = nn.Linear(4 * net_state_dim, hidden_dim)
         self.node_embed = nn.Embedding(num_nodes, vnf_state_dim, dtype=torch.float32)
-        self.sfc_linear = nn.Linear(config.MAX_SFC_LENGTH + 2, config.MAX_SFC_LENGTH)
 
-        self.query = nn.Linear(net_state_dim, net_state_dim)
-        self.key = nn.Linear(net_state_dim, net_state_dim)
-        self.value = nn.Linear(net_state_dim, net_state_dim)
+        self.query = nn.Linear(net_state_dim, 4 * net_state_dim)
+        self.key = nn.Linear(net_state_dim, 4 * net_state_dim)
+        self.value = nn.Linear(net_state_dim, 4 * net_state_dim)
 
     def forward(self, state):
         net_state, sfc_state, source_dest_node_pair = zip(*state)
         net_states_list = list(net_state)
         sfc_states_list = list(sfc_state)
 
+        # net state self attention
         batch_net_state = Batch.from_data_list(net_states_list)  # net state = DataBatch(x, edge_index, batch, ptr)
         batch_net_state, _ = to_dense_batch(batch_net_state.x, batch_net_state.batch)    # batch_size * num_nodes * net_state_dim
 
@@ -183,7 +146,7 @@ class StateNetwork(nn.Module):
 
         mask = (batch_sfc.abs().sum(dim=-1) == 0)   # batch_size * (max_sfc_length + 2)
 
-        batch_sfc = self.sfc_proj(batch_sfc)    # batch_size * (max_sfc_length + 2) * hidden_dim
+        batch_sfc = self.sfc_linear(batch_sfc)    # batch_size * (max_sfc_length + 2) * hidden_dim
 
         # position embedding
         batch_size, seq_len, _ = batch_sfc.shape
@@ -198,7 +161,6 @@ class StateNetwork(nn.Module):
         batch_state = torch.cat((batch_net_state, batch_sfc_attention), dim=1)
         return batch_state
 
-# todo: drl-sfcp
 class GCNConvNet(nn.Module):
     def __init__(self, input_dim, output_dim, embedding_dim=128, num_layers=3, batch_norm=True, dropout_prob=0.0):
         super().__init__()
@@ -250,8 +212,10 @@ class Attention(nn.Module):
         self.v = nn.Linear(hidden_dim, 1, bias=False)
 
     def forward(self, hidden, encoder_outputs, mask=None):
-        # hidden shape: batch_size * seq_len * hidden_dim
+        # hidden shape: 1 * batch_size * hidden_dim
         encoder_outputs = encoder_outputs.permute(1, 0, 2)  # batch_size * seq_len * hidden_dim
+        seq_len = encoder_outputs.shape[1]
+        hidden = hidden.permute(1, 0, 2).repeat(1, seq_len, 1)   # batch_size * seq_len * hidden_dim
         energy = torch.tanh(self.attn(torch.cat([hidden, encoder_outputs], dim=2))) # batch_size * seq_len * hidden_dim
         attn_weights = F.softmax(self.v(energy).squeeze(2), dim=1)  # batch_size * seq_len
         if mask is not None:

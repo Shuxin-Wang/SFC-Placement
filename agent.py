@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from collections import deque
 import networkx as nx
+from openpyxl.descriptors import NoneSet
 from torch_geometric.data import Data
 import config
 import environment
@@ -380,7 +381,7 @@ class PPO(nn.Module):
             env.clear()
         return self.avg_episode_reward / episode, self.avg_acceptance_ratio / sfc_generator.batch_size / episode
 
-    def train(self, episode=1, batch_size=200, discount=0.99, clip_epsilon=0.2, ppo_epochs=4):
+    def train(self, episode=1, batch_size=200, discount=0.99, clip_epsilon=0.2, ppo_epochs=5):
 
         self.actor_loss_list.clear()
         self.critic_loss_list.clear()
@@ -421,9 +422,9 @@ class PPO(nn.Module):
 
                 ratio = torch.exp(log_pi_action - old_log_pi_action)
 
-                surr1 = ratio * advantage
-                surr2 = torch.clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon) * advantage
-                actor_loss = -torch.min(surr1, surr2).mean()
+                v1 = ratio * advantage
+                v2 = torch.clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon) * advantage
+                actor_loss = -torch.min(v1, v2).mean()
 
                 self.actor_optimizer.zero_grad()
                 actor_loss.backward()
@@ -432,7 +433,7 @@ class PPO(nn.Module):
                 avg_actor_loss += actor_loss.item()
 
                 current_values = self.critic(states)
-                critic_loss = F.smooth_l1_loss(target_values, current_values)
+                critic_loss = F.mse_loss(target_values, current_values)
 
                 self.critic_optimizer.zero_grad()
                 critic_loss.backward()
@@ -685,6 +686,10 @@ class DRLSFCP:
                 env.clear_sfc()
             self.avg_acceptance_ratio += env.sfc_placed_num
             env.clear()
+
+            self.actor._last_hidden_state = None
+            self.critic._last_hidden_state = None
+
         return self.avg_episode_reward / episode, self.avg_acceptance_ratio / sfc_generator.batch_size / episode
 
     def train(self, episode=1, batch_size=200, discount=0.99):
@@ -736,6 +741,9 @@ class DRLSFCP:
             self.actor_optimizer.step()
             self.actor_loss_list.append(actor_loss.item())
 
+            self.actor._last_hidden_state = None
+            self.critic._last_hidden_state = None
+
     def test(self, env, sfc_list, sfc_state_list, source_dest_node_pairs):
         self.avg_episode_reward = 0
         self.avg_acceptance_ratio = 0
@@ -757,6 +765,10 @@ class DRLSFCP:
             sfc = source_dest_node_pair.to(dtype=torch.int32).tolist() + sfc_list[i]
             _, reward = env.step(sfc, placement)
             self.avg_episode_reward += reward
+
+        self.actor._last_hidden_state = None
+        self.critic._last_hidden_state = None
+
         self.avg_acceptance_ratio = (env.sfc_placed_num / len(sfc_list))
         return self.avg_episode_reward, self.avg_acceptance_ratio
 
