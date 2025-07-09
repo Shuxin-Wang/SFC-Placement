@@ -107,7 +107,7 @@ def show_evaluate_result(dir_path, agent_name_list):
             for j, value in enumerate(df[metric]):
                 plt.text(
                     j + i * bar_width,  # x
-                    value + (0.01 if value >= 0 else -0.01) * max(abs(df[metric])),  # y
+                    value,  # y
                     f'{value:.2f}',
                     ha='center',
                     va='bottom' if value >= 0 else 'top'
@@ -124,7 +124,7 @@ def show_evaluate_result(dir_path, agent_name_list):
         if metric == 'Average Exceeded Penalty':
             plt.ylim(200, 900)
         if metric == 'Average Power Consumption':
-            plt.ylim(100, 310)
+            plt.ylim(100, 315)
         plt.xticks(index + bar_width, labels=labels)
         plt.legend()
         plt.grid(axis='y', linestyle='--', alpha=0.3)
