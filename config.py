@@ -1,15 +1,15 @@
 import argparse
 
 # default parameters
-BATCH_SIZE = 20
+BATCH_SIZE = 50
 ITERATION = 500
-EPISODE = 10
+EPISODE = 10    # fill episode * batch_size data into replay buffer
 LEARNING_RATE = 0.001
 
 NUM_VNF_TYPES = 8   # number of VNF types
 
 MIN_SFC_LENGTH = 4
-MAX_SFC_LENGTH = 24 # max sfc length agent can finish placement, different from SFCBatchGenerator max_sfc_length
+MAX_SFC_LENGTH = 8 # max sfc length agent can finish placement, different from SFCBatchGenerator max_sfc_length
 
 # convert string to boolean value
 def str2bool(s):

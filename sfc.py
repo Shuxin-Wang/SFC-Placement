@@ -20,6 +20,13 @@ class SFCBatchGenerator:
         self.mask = np.zeros((self.batch_size, config.MAX_SFC_LENGTH), dtype='int32')
         self.sfc_batch_list = []
 
+    def set_batch_size(self, batch_size):
+        self.batch_size = batch_size
+        self.sfc_length = np.zeros(batch_size, dtype='int32')
+        self.sfc = np.zeros((batch_size, config.MAX_SFC_LENGTH), dtype='int32')
+        self.source_dest_node_pair = np.zeros((batch_size, 2), dtype='int32')
+        self.mask = np.zeros((batch_size, config.MAX_SFC_LENGTH), dtype='int32')
+
     # set a new batch of sfc
     def get_sfc_batch(self):
         self.sfc.fill(0)
