@@ -223,7 +223,7 @@ class Environment:
         aggregate_features = []
         for node in G.nodes():
             features = np.zeros(4)
-            features[0] = self.node_properties[int(node)]['capacity']
+            features[0] = self.node_properties[int(node)]['capacity'] - self.node_used[int(node)]
             num_neighbor = len(list(G.neighbors(node)))
             for neighbor in G.neighbors(node):
                 if int(node) > int(neighbor):  # adjust nodes order to select link
@@ -231,8 +231,8 @@ class Environment:
                 else:
                     index = self.link_index[(node, neighbor)]
                 # add neighbor node and connected link properties to state
-                features[1] += self.node_properties[int(neighbor)]['capacity']
-                features[2] += self.link_properties[index]['bandwidth']
+                features[1] += self.node_properties[int(neighbor)]['capacity'] - self.node_used[int(neighbor)]
+                features[2] += self.link_properties[index]['bandwidth'] - self.link_used[index]
                 features[3] += self.link_properties[index]['latency']
             features[1:] /= num_neighbor
             aggregate_features.append(features.tolist())
