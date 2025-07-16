@@ -336,8 +336,8 @@ class PPO(nn.Module):
         self.actor = StateNetworkActor(num_nodes, node_state_dim, vnf_state_dim).to(device)
         self.critic = StateNetworkCritic(node_state_dim, vnf_state_dim, num_nodes, hidden_dim=64).to(device)
 
-        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=1e-5, weight_decay=1e-5)
-        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=5e-5, weight_decay=1e-5)
+        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=1e-4, weight_decay=1e-5)
+        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=1e-3, weight_decay=1e-5)
 
         self.replay_buffer = ReplayBuffer(capacity=config.EPISODE * config.BATCH_SIZE)
 
@@ -402,7 +402,7 @@ class PPO(nn.Module):
             env.clear()
         return self.avg_episode_reward / episode, self.avg_acceptance_ratio / sfc_generator.batch_size / episode
 
-    def train(self, episode=1, batch_size=config.EPISODE * config.BATCH_SIZE, discount=0.9, clip_epsilon=0.2, ppo_epochs=5, gae_lambda=0.95):
+    def train(self, episode=1, batch_size=config.EPISODE * config.BATCH_SIZE, discount=0.99, clip_epsilon=0.2, ppo_epochs=1, gae_lambda=0.95):
 
         self.actor_loss_list.clear()
         self.critic_loss_list.clear()
@@ -533,7 +533,7 @@ class PPO(nn.Module):
             avg_actor_loss += actor_loss.item()
 
             current_values = self.critic(all_states)
-            critic_loss = F.mse_loss(all_targets, current_values)
+            critic_loss = F.smooth_l1_loss(all_targets, current_values)
 
             self.critic_optimizer.zero_grad()
             critic_loss.backward()
