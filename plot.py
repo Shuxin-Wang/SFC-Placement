@@ -34,6 +34,8 @@ def show_train_result(dir_path, agent_name_list):
         sns.lineplot(data=df, x='Episode', y='Actor Loss', color=colors[i], alpha=0.2, label=None)
         sns.lineplot(data=df, x='Episode', y='Smoothed Actor Loss', color=colors[i], label=agent_name_list[i] + ' Smoothed Actor Loss')
     plt.title('Actor Training Loss Curve with Smoothing')
+    # plt.ylim(0, 100)
+    # plt.yscale('log')
     plt.legend()
 
     # Critic Loss
@@ -46,18 +48,19 @@ def show_train_result(dir_path, agent_name_list):
         sns.lineplot(data=df, x='Episode', y='Smoothed Critic Loss', color=colors[i],
                      label=agent_name_list[i] + ' Smoothed Critic Loss')
     plt.title('Critic Training Loss Curve with Smoothing')
+    # plt.ylim(0, 100)
     plt.legend()
 
-    plt.figure(figsize=(10, 6))
-    for i in range(agent_num):
-        df = pd.DataFrame({'Episode': episode, 'Reward': reward_list[i]})
-        df['Smoothed Reward'] = df['Reward'].rolling(window=window_size, center=True).mean()
-        sns.lineplot(data=df, x='Episode', y='Reward', color=colors[i], alpha=0.2,
-                     label=None)
-        sns.lineplot(data=df, x='Episode', y='Smoothed Reward', color=colors[i],
-                     label=agent_name_list[i] + ' Smoothed Reward')
-    plt.title('Reward Curve with Smoothing')
-    plt.legend()
+    # plt.figure(figsize=(10, 6))
+    # for i in range(agent_num):
+    #     df = pd.DataFrame({'Episode': episode, 'Reward': reward_list[i]})
+    #     df['Smoothed Reward'] = df['Reward'].rolling(window=window_size, center=True).mean()
+    #     sns.lineplot(data=df, x='Episode', y='Reward', color=colors[i], alpha=0.2,
+    #                  label=None)
+    #     sns.lineplot(data=df, x='Episode', y='Smoothed Reward', color=colors[i],
+    #                  label=agent_name_list[i] + ' Smoothed Reward')
+    # plt.title('Reward Curve with Smoothing')
+    # plt.legend()
 
     plt.show()
 
@@ -126,10 +129,10 @@ def show_evaluate_result(dir_path, agent_name_list):
 
 if __name__ == '__main__':
     agent_name_list = [
-        # 'NCO',
-        # 'EnhancedNCO',
-        # 'DRLSFCP',
+        'NCO',
+        'EnhancedNCO',
+        'DRLSFCP',
         'PPO',
         ]
-    show_train_result('save/result/train', agent_name_list)
-    # show_evaluate_result('save/result/evaluate', agent_name_list)
+    # show_train_result('save/result/train', agent_name_list)
+    show_evaluate_result('save/result/evaluate', agent_name_list)
