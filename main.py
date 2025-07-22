@@ -181,26 +181,26 @@ if __name__ == '__main__':
     # train
     agent_list = [
         # NCO(node_state_dim, vnf_state_dim, env.num_nodes, device), finish
-        # EnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, device),
-        # DRLSFCP(env.num_nodes, node_state_dim, vnf_state_dim, device),    finish
-        # PPO(env.num_nodes, node_state_dim, vnf_state_dim, device)   finish
+        # EnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, device), finish
+        # DRLSFCP(env.num_nodes, node_state_dim, vnf_state_dim, device), finish
+        # PPO(env.num_nodes, node_state_dim, vnf_state_dim, device) finish
     ]
 
-    for agent in agent_list:
-        train(agent, env, sfc_generator, iteration=config.ITERATION)
+    # for agent in agent_list:
+    #     train(agent, env, sfc_generator, iteration=config.ITERATION)
 
     # evaluate
     agent_path = 'save/model/'
     agent_name_list = [
         'NCO',
-        # 'EnhancedNCO',
+        'EnhancedNCO',
         'DRLSFCP',
         'PPO',
         ]
 
     batch_size_list = [10, 20, 30, 40, 50]
 
-    evaluate(agent_path, agent_name_list, env, sfc_generator, batch_size_list, episodes=10)
+    evaluate(agent_path, agent_name_list, env, sfc_generator, batch_size_list, episodes=50)
 
-    # plot.show_train_result('save/result/train', agent_name_list)
+    plot.show_train_result('save/result/train', agent_name_list)
     plot.show_evaluate_result('save/result/evaluate', agent_name_list)
