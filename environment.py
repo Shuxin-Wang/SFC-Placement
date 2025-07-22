@@ -2,7 +2,6 @@ import random
 import numpy as np
 import networkx as nx
 import torch
-from torch_geometric.nn.resolver import swish
 from torch_geometric.utils import to_undirected
 import config
 
@@ -151,11 +150,11 @@ class Environment:
     def compute_power(self, sfc, placement):
         for vnf, node in zip(sfc, placement):
             if self.node_occupied[node]:
-                self.power_consumption += self.p_unit * self.node_used[node]
+                self.power_consumption += self.p_unit * VNF_SIZE[vnf]
             else:
-                self.power_consumption += self.p_min + self.p_unit * self.node_used[node]
+                self.power_consumption += self.p_min + self.p_unit * VNF_SIZE[vnf]
                 self.node_occupied[node] = 1
-        # todo: calculate path power according to latency
+        self.power_consumption += 0.05 * self.sfc_latency
 
     # compute the overall reward of a sfc
     def compute_reward(self, sfc):
