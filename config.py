@@ -2,7 +2,7 @@ import argparse
 
 # default parameters
 BATCH_SIZE = 20
-ITERATION = 200
+ITERATION = 2000
 EPISODE = 10    # fill episode * batch_size data into replay buffer
 LEARNING_RATE = 0.001
 
