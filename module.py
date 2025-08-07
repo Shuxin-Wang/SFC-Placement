@@ -1,13 +1,9 @@
-import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import networkx as nx
 from torch_geometric.nn import GATConv, GCNConv
 from torch_geometric.utils import to_dense_batch
-from torch_geometric.data import Data, Batch
-from environment import Environment
-from sfc import SFCBatchGenerator
+from torch_geometric.data import Batch
 import config
 
 class GAT(nn.Module):
@@ -235,46 +231,3 @@ class Encoder(nn.Module):
         embeddings = F.relu(x)
         outputs, hidden_state = self.gru(embeddings)    # all timestep output: seq_len * batch_size * embedding_dim, last hidden_state: 1, batch_size, embedding_dim
         return outputs, hidden_state
-
-if __name__ == '__main__':
-
-    random.seed(27)
-
-    G = nx.read_graphml('graph/Cogentco.graphml')
-    env = Environment(G)
-    sfc_generator = SFCBatchGenerator(config.BATCH_SIZE, config.MIN_SFC_LENGTH, config.MAX_SFC_LENGTH,
-                                      config.NUM_VNF_TYPES, env.num_nodes)
-    sfc_generator.get_sfc_batch()
-    sfc_states = sfc_generator.get_sfc_states()
-    source_dest_node_pairs = sfc_generator.get_source_dest_node_pairs()
-    env.get_state_dim(sfc_generator)
-
-    node_state_dim = env.node_state_dim
-    vnf_state_dim = env.vnf_state_dim
-
-    # state network test
-    aggregate_features = env.aggregate_features()
-    edge_index = env.get_edge_index()
-    net_state = Data(x=aggregate_features, edge_index=edge_index)
-    state_network = StateNetwork(node_state_dim, vnf_state_dim)
-    batch_state = [(net_state, sfc_states[0], source_dest_node_pairs[0]),
-                   (net_state, sfc_states[1], source_dest_node_pairs[1]),
-                   (net_state, sfc_states[2], source_dest_node_pairs[2])]    # net_state = Data(x=[197, 28], edge_index=[2, 486])
-    state = state_network(batch_state)  # batch_size * (node_num + max_sfc_length + 2) * vnf_state_dim
-    print(state.shape)
-
-    # GAT test
-    # aggregate_features = env.aggregate_features()
-    # edge_index = env.get_edge_index()
-    # net_state = Data(x=aggregate_features, edge_index=edge_index)
-    # net_state_list = [net_state, net_state, net_state]
-    # batch_net_state = Batch.from_data_list(net_state_list)
-    # gat = GAT(input_dim=node_state_dim, hidden_dim=64, output_dim=vnf_state_dim, num_heads=8)
-    # print('GAT output:', gat(batch_net_state))
-
-    # sfc attention test
-    # batch_sfc_state = torch.stack([sfc_states[0], sfc_states[0], sfc_states[0]], dim=0)
-    # multihead_attention = MultiheadAttention(dim_model=vnf_state_dim, dim_k=3, dim_v=3, num_heads=1)
-    # y, attention = multihead_attention(batch_sfc_state, batch_sfc_state, batch_sfc_state)
-    # print('multihead attention output:', y)
-    # print('attention weights:', attention)
