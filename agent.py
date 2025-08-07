@@ -49,7 +49,6 @@ class NCO(nn.Module):
 
         self.avg_episode_reward = 0
         self.avg_acceptance_ratio = 0
-        self.avg_sfc_latency = 0
         self.avg_node_resource_utilization = 0
 
     def select_action(self, logits, exploration=True):
@@ -145,10 +144,6 @@ class NCO(nn.Module):
             self.critic_loss_list.append(critic_loss.item())
 
     def test(self, env, sfc_list, sfc_state_list, source_dest_node_pairs):
-        self.avg_episode_reward = 0
-        self.avg_acceptance_ratio = 0
-        self.avg_sfc_latency = 0
-        self.avg_node_resource_utilization = 0
         num_sfc = len(sfc_list)
         env.clear()
         for i in range(num_sfc):  # each episode contains batch_size sfc
@@ -166,15 +161,7 @@ class NCO(nn.Module):
             action = self.select_action(logits, exploration=False)  # action_dim: batch_size * max_sfc_length * 1
             placement = action[0][:len(sfc_list[i])].squeeze(0).to(dtype=torch.int32).tolist()  # masked placement
             sfc = source_dest_node_pair.to(dtype=torch.int32).tolist() + sfc_list[i]
-            _, reward = env.step(sfc, placement)
-            self.avg_episode_reward += reward
-            self.avg_sfc_latency += env.sfc_latency
-        self.avg_acceptance_ratio = (env.sfc_placed_num / num_sfc)
-        self.avg_sfc_latency = self.avg_sfc_latency / num_sfc
-        node_resource_used =  env.node_used[env.node_occupied == 1]
-        node_resource_total = np.array([env.node_properties[node]['capacity'] for node in range(env.num_nodes)])[env.node_occupied == 1]
-        self.avg_node_resource_utilization = np.min([1, np.mean(node_resource_used / node_resource_total)])
-        return self.avg_episode_reward, self.avg_acceptance_ratio, self.avg_sfc_latency, self.avg_node_resource_utilization
+            env.step(sfc, placement)
 
 class EnhancedNCO(nn.Module):
     def __init__(self, num_nodes, node_state_dim, vnf_state_dim, device='cpu'):
@@ -195,7 +182,6 @@ class EnhancedNCO(nn.Module):
 
         self.avg_episode_reward = 0
         self.avg_acceptance_ratio = 0
-        self.avg_sfc_latency = 0
         self.avg_node_resource_utilization = 0
 
     def select_action(self, logits, exploration=True):
@@ -296,10 +282,6 @@ class EnhancedNCO(nn.Module):
             self.actor_loss_list.append(actor_loss.item())
 
     def test(self, env, sfc_list, sfc_state_list, source_dest_node_pairs):
-        self.avg_episode_reward = 0
-        self.avg_acceptance_ratio = 0
-        self.avg_sfc_latency = 0
-        self.avg_node_resource_utilization = 0
         num_sfc = len(sfc_list)
         env.clear()
         for i in range(num_sfc):  # each episode contains batch_size sfc
@@ -317,15 +299,7 @@ class EnhancedNCO(nn.Module):
             action = self.select_action(logits, exploration=False)  # action_dim: batch_size * max_sfc_length * 1
             placement = action[0][:len(sfc_list[i])].squeeze(0).to(dtype=torch.int32).tolist()  # masked placement
             sfc = source_dest_node_pair.to(dtype=torch.int32).tolist() + sfc_list[i]
-            _, reward = env.step(sfc, placement)
-            self.avg_episode_reward += reward
-            self.avg_sfc_latency += env.sfc_latency
-        self.avg_acceptance_ratio = (env.sfc_placed_num / num_sfc)
-        self.avg_sfc_latency = self.avg_sfc_latency / num_sfc
-        node_resource_used = env.node_used[env.node_occupied == 1]
-        node_resource_total = np.array([env.node_properties[node]['capacity'] for node in range(env.num_nodes)])[env.node_occupied == 1]
-        self.avg_node_resource_utilization = np.min([1, np.mean(node_resource_used / node_resource_total)])
-        return self.avg_episode_reward, self.avg_acceptance_ratio, self.avg_sfc_latency, self.avg_node_resource_utilization
+            env.step(sfc, placement)
 
 class PPO(nn.Module):
     def __init__(self, num_nodes, node_state_dim, vnf_state_dim, device='cpu'):
@@ -346,7 +320,6 @@ class PPO(nn.Module):
 
         self.avg_episode_reward = 0
         self.avg_acceptance_ratio = 0
-        self.avg_sfc_latency = 0
         self.avg_node_resource_utilization = 0
 
     def select_action(self, logits, exploration=True):
@@ -407,60 +380,6 @@ class PPO(nn.Module):
 
         avg_actor_loss = 0
         avg_critic_loss = 0
-
-        # TD error
-        # for e in range(episode):
-        #     batch_states, batch_actions, batch_rewards, batch_next_states, batch_dones = zip(
-        #         *self.replay_buffer.sample(batch_size))
-        #     states = list(batch_states)  # state = [(net_state, sfc_state), (net_state, sfc_state)...]
-        #     actions = torch.stack(batch_actions, dim=0).squeeze(1).to(
-        #         self.device)  # action = torch.tensor((action), (action)...)) batch_size * max_sfc_length
-        #     rewards = torch.tensor(batch_rewards, dtype=torch.float32).unsqueeze(1).to(self.device)
-        #     next_states = list(batch_next_states)
-        #     dones = torch.tensor(batch_dones, dtype=torch.float32).unsqueeze(1).to(self.device)
-        #
-        #     with torch.no_grad():
-        #         next_values = self.critic(next_states)
-        #         target_values = rewards + discount * next_values * (1 - dones)
-        #         baseline = self.critic(states)
-        #         advantage = target_values - baseline
-        #         advantage = (advantage - advantage.mean()) / (advantage.std() + 1e-8)
-        #
-        #     with torch.no_grad():
-        #         old_logits, _ = self.actor(states)
-        #         old_log_probs = F.log_softmax(old_logits, dim=-1)
-        #         old_log_pi_action = old_log_probs.gather(dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
-        #         old_log_pi_action = old_log_pi_action.sum(dim=1, keepdim=True)
-        #
-        #     for _ in range(ppo_epochs):
-        #         logits, _ = self.actor(states)
-        #         log_probs = F.log_softmax(logits, dim=-1)
-        #         log_pi_action = log_probs.gather(dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)
-        #         log_pi_action = log_pi_action.sum(dim=1, keepdim=True)
-        #
-        #         ratio = torch.exp(log_pi_action - old_log_pi_action)
-        #
-        #         v1 = ratio * advantage
-        #         v2 = torch.clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon) * advantage
-        #         actor_loss = -torch.min(v1, v2).mean()
-        #
-        #         self.actor_optimizer.zero_grad()
-        #         actor_loss.backward()
-        #         nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1)
-        #         self.actor_optimizer.step()
-        #         avg_actor_loss += actor_loss.item()
-        #
-        #         current_values = self.critic(states)
-        #         critic_loss = F.mse_loss(target_values, current_values)
-        #
-        #         self.critic_optimizer.zero_grad()
-        #         critic_loss.backward()
-        #         nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1)
-        #         self.critic_optimizer.step()
-        #         avg_critic_loss += critic_loss.item()
-        #
-        #     self.actor_loss_list.append(avg_actor_loss / ppo_epochs)
-        #     self.critic_loss_list.append(avg_critic_loss / ppo_epochs)
 
         # GAE
         len_traj = config.BATCH_SIZE
@@ -543,10 +462,6 @@ class PPO(nn.Module):
         self.critic_loss_list.append(avg_critic_loss / ppo_epochs)
 
     def test(self, env, sfc_list, sfc_state_list, source_dest_node_pairs):
-        self.avg_episode_reward = 0
-        self.avg_acceptance_ratio = 0
-        self.avg_sfc_latency = 0
-        self.avg_node_resource_utilization = 0
         num_sfc = len(sfc_list)
         env.clear()
         for i in range(num_sfc):  # each episode contains batch_size sfc
@@ -564,15 +479,7 @@ class PPO(nn.Module):
             action = self.select_action(logits, exploration=False)  # action_dim: batch_size * max_sfc_length * 1
             placement = action[0][:len(sfc_list[i])].squeeze(0).to(dtype=torch.int32).tolist()  # masked placement
             sfc = source_dest_node_pair.to(dtype=torch.int32).tolist() + sfc_list[i]
-            _, reward = env.step(sfc, placement)
-            self.avg_episode_reward += reward
-            self.avg_sfc_latency += env.sfc_latency
-        self.avg_acceptance_ratio = (env.sfc_placed_num / num_sfc)
-        self.avg_sfc_latency = self.avg_sfc_latency / num_sfc
-        node_resource_used = env.node_used[env.node_occupied == 1]
-        node_resource_total = np.array([env.node_properties[node]['capacity'] for node in range(env.num_nodes)])[env.node_occupied == 1]
-        self.avg_node_resource_utilization = np.min([1, np.mean(node_resource_used / node_resource_total)])
-        return self.avg_episode_reward, self.avg_acceptance_ratio, self.avg_sfc_latency, self.avg_node_resource_utilization
+            env.step(sfc, placement)
 
 class DRLSFCP:
     def __init__(self,num_nodes, net_state_dim, vnf_state_dim, embedding_dim=64, device='cpu'):
@@ -591,7 +498,6 @@ class DRLSFCP:
 
         self.avg_episode_reward = 0
         self.avg_acceptance_ratio = 0
-        self.avg_sfc_latency = 0
         self.avg_node_resource_utilization = 0
 
     def select_action(self, logits, exploration=True):
@@ -698,10 +604,6 @@ class DRLSFCP:
             self.critic._last_hidden_state = None
 
     def test(self, env, sfc_list, sfc_state_list, source_dest_node_pairs):
-        self.avg_episode_reward = 0
-        self.avg_acceptance_ratio = 0
-        self.avg_sfc_latency = 0
-        self.avg_node_resource_utilization = 0
         num_sfc = len(sfc_list)
         env.clear()
         for i in range(num_sfc):  # each episode contains batch_size sfc
@@ -719,65 +621,7 @@ class DRLSFCP:
             action = self.select_action(logits, exploration=False)  # action_dim: batch_size * max_sfc_length * 1
             placement = action[0][:len(sfc_list[i])].squeeze(0).to(dtype=torch.int32).tolist()  # masked placement
             sfc = source_dest_node_pair.to(dtype=torch.int32).tolist() + sfc_list[i]
-            _, reward = env.step(sfc, placement)
-            self.avg_episode_reward += reward
-            self.avg_sfc_latency += env.sfc_latency
+            env.step(sfc, placement)
 
         self.actor._last_hidden_state = None
         self.critic._last_hidden_state = None
-
-        self.avg_acceptance_ratio = (env.sfc_placed_num / num_sfc)
-        self.avg_sfc_latency = self.avg_sfc_latency / num_sfc
-        node_resource_used = env.node_used[env.node_occupied == 1]
-        node_resource_total = np.array([env.node_properties[node]['capacity'] for node in range(env.num_nodes)])[env.node_occupied == 1]
-        self.avg_node_resource_utilization = np.min([1, np.mean(node_resource_used / node_resource_total)])
-        return self.avg_episode_reward, self.avg_acceptance_ratio, self.avg_sfc_latency, self.avg_node_resource_utilization
-
-if __name__ == '__main__':
-    # todo: optimize code
-    if torch.cuda.is_available():
-        device = torch.device('cuda')
-    else:
-        device = torch.device('cpu')
-
-    G = nx.read_graphml('graph/Cogentco.graphml')
-    env = environment.Environment(G)
-    sfc_generator = SFCBatchGenerator(20, config.MIN_SFC_LENGTH, config.MAX_SFC_LENGTH,
-                                          config.NUM_VNF_TYPES, env.num_nodes)
-
-    env.clear()
-    env.get_state_dim(sfc_generator)
-
-    node_state_dim = env.node_state_dim
-    vnf_state_dim = env.vnf_state_dim
-    state_dim = env.state_dim
-    state_input_dim = node_state_dim * env.num_nodes + config.MAX_SFC_LENGTH * vnf_state_dim
-    state_output_dim = (env.num_nodes + config.MAX_SFC_LENGTH + 2) * vnf_state_dim
-
-    # agent = DDPG(env.num_nodes, node_state_dim, vnf_state_dim, state_output_dim,
-    #              config.MAX_SFC_LENGTH * env.num_nodes, device)
-    # agent = NCO(vnf_state_dim, env.num_nodes, device)
-    agent = DRLSFCP(node_state_dim, vnf_state_dim, device=device)
-
-    for iteration in range(config.ITERATION):
-        agent.fill_replay_buffer(env, sfc_generator, 10)
-        agent.train(10, 20)
-
-    # actor and critic test
-    # node_features = env.aggregate_features()
-    # net_state = Data(x=node_features, edge_index=edge_index)
-    # sfc_generator.get_sfc_batch()
-    # sfc_states = sfc_generator.get_sfc_states()
-    # state = [(net_state, sfc_states[0]), (net_state, sfc_states[1]), (net_state, sfc_states[2])]
-    #
-    # actor = Actor(node_state_dim, vnf_state_dim, state_dim, action_dim=config.MAX_SFC_LENGTH)
-    # action = actor(state)
-    # print('actor action:\n', action)
-    #
-    # # net input dim + sfc input dim + action output dim
-    # critic_input_dim = env.num_nodes * node_state_dim + config.MAX_SFC_LENGTH * vnf_state_dim + config.MAX_SFC_LENGTH
-    # critic = Critic(critic_input_dim, output_dim=1)
-    # q = critic(state, action)
-    # print('critic q:\n', q)
-
-

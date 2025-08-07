@@ -32,7 +32,8 @@ class Environment:
         self.state_dim = 0
 
         self.p_min = 2    # power consumption to activate a node
-        self.p_unit = 1   # power consumption per unit
+        self.p_unit = 1   # power consumption per unit node resource
+        self.p_link = 0.05  # power consumption per link length
 
         self.path_penalty = 200  # a penalty factor added to reward if there is no path found between two vnf
 
@@ -73,6 +74,9 @@ class Environment:
         self.power_consumption_list = []
         self.exceeded_penalty_list = []
         self.reward_list = []
+        self.sfc_latency_list = []
+        self.exceeded_node_capacity_list = []
+        self.exceeded_link_bandwidth_list = []
 
     # place VNF and record exceeded node capacity
     def place_vnf(self, sfc, placement):
@@ -154,7 +158,7 @@ class Environment:
             else:
                 self.power_consumption += self.p_min + self.p_unit * VNF_SIZE[vnf]
                 self.node_occupied[node] = 1
-        self.power_consumption += 0.05 * self.sfc_latency
+        self.power_consumption += self.p_link * self.sfc_latency
 
     # compute the overall reward of a sfc
     def compute_reward(self, sfc):
@@ -179,18 +183,15 @@ class Environment:
                                  + self.lambda_bandwidth * self.exceeded_bandwidth
                                  + self.lambda_latency * self.exceeded_latency)
 
-        # print(f"SFC reward: {self.lambda_placement * self.placement_reward},"
-        #       f"power consumption: {self.lambda_power * self.power_consumption}")
-        # print(f'exceeded capacity: {self.lambda_capacity * self.exceeded_capacity},'
-        #       f'exceeded bandwidth: {self.lambda_bandwidth * self.exceeded_bandwidth},'
-        #       f'exceeded latency: {self.lambda_latency * self.exceeded_latency}')
-
         self.reward = self.placement_reward - self.power_consumption - self.exceeded_penalty
 
         self.placement_reward_list.append(self.placement_reward)
         self.power_consumption_list.append(self.power_consumption)
         self.exceeded_penalty_list.append(self.exceeded_penalty)
         self.reward_list.append(self.reward)
+        self.sfc_latency_list.append(self.sfc_latency)
+        self.exceeded_node_capacity_list.append(self.exceeded_capacity)
+        self.exceeded_link_bandwidth_list.append(self.exceeded_bandwidth)
 
     @staticmethod
     def link_to_index(links):
@@ -258,10 +259,9 @@ class Environment:
 
         next_node_states = self.aggregate_features()
 
-        return next_node_states, self.reward / 1000
+        return next_node_states, self.reward / 1000 # reward scaling
 
     def render(self):
-        # todo: show more details
         net_states = self.aggregate_features()
         print('node number:', self.graph.number_of_nodes())
         print('link number:', self.graph.number_of_edges())
@@ -314,52 +314,6 @@ class Environment:
         self.power_consumption_list.clear()
         self.exceeded_penalty_list.clear()
         self.reward_list.clear()
-
-if __name__ == '__main__':
-
-    random.seed(27)
-    g = nx.read_graphml('graph/Cogentco.graphml')
-    env = Environment(g)
-    print('number of nodes:', g.number_of_nodes())
-    print('number of links:', g.number_of_edges())
-
-    # env test
-    test_placement = torch.tensor([0, 0, 2, 4], dtype=torch.int32)
-    test_sfc = torch.tensor([0, 27] + [1, 3, 5, 7])
-    test_path = [['0'], ['0', '9', '8', '7', '6', '4', '3', '77', '2'], ['2', '77', '3', '4']]
-
-    env.clear()
-    env.step(test_sfc, test_placement)
-    # env.render()
-
-    # env step by step test
-    # env.vnf_placement = np.zeros(4, dtype='int32')
-    # env.place_vnf(test_sfc, test_placement)
-    # print('node used:', env.node_used)
-    # print('vnf_placement:', env.vnf_placement)
-
-    # env.find_sfc_path(test_placement)
-    # print('sfc path:', env.sfc_path)
-
-    # env.compute_capacity(test_placement)
-    # print('node used:', env.node_used[:5])
-    # print('node capacity:', [node['capacity'] for node in env.node_properties][:5])
-    # print('exceeded capacity:', env.exceeded_capacity)    # 10+10+10+7
-
-    # env.compute_latency(test_path, test_sfc)
-    # print('latency requirement:', env.latency_requirement)  # 20+40+80+100
-    # print('sfc latency:', env.sfc_latency)
-    # print('exceeded latency:', env.exceeded_latency)
-
-    # env.compute_bandwidth(test_sfc, test_path)
-    # print('bandwidth requirement:', env.bandwidth_requirement)
-    # print('exceeded bandwidth:', env.exceeded_bandwidth)
-
-    # env.compute_power(test_sfc, test_placement)
-    # print('power consumption:', env.power_consumption)  # (200+300+200) + (300+200) + (200+100) + (200+100)
-
-    # env.compute_reward(test_sfc)
-    print('placement reward:', env.placement_reward)
-    print('power consumption:', env.power_consumption)
-    print('exceeded penalty:', env.exceeded_penalty)
-    print('reward:', env.reward)
+        self.sfc_latency_list.clear()
+        self.exceeded_node_capacity_list.clear()
+        self.exceeded_link_bandwidth_list.clear()

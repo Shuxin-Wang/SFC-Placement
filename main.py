@@ -6,12 +6,12 @@ import pandas as pd
 import os
 import time
 import plot
-import environment
+from environment import Environment
 from sfc import SFCBatchGenerator
 import config
 from agent import NCO, DRLSFCP, EnhancedNCO, PPO
 
-def train(agent, env, sfc_generator, iteration):
+def train(agent, env, graph, sfc_generator, iteration):
     actor_loss_list = []
     critic_loss_list = []
     reward_list = []
@@ -55,18 +55,18 @@ def train(agent, env, sfc_generator, iteration):
         'training_time': training_time
     }
 
-    csv_file_path = 'save/result/train/' + agent_name + '.csv'
+    csv_file_path = 'save/result/' + graph + '/train/' + agent_name + '.csv'
     df = pd.DataFrame({'Reward': reward_list, 'Acceptance Ratio': avg_acceptance_ratio_list ,'Actor Loss': actor_loss_list, 'Critic Loss': critic_loss_list, 'Training Time': training_time_list})
     os.makedirs(os.path.dirname(csv_file_path), exist_ok=True)
     df.to_csv(csv_file_path, index=True)
     print('Training results saved to {}'.format(csv_file_path))
 
-    agent_file_path = 'save/model/' + agent_name + '.pth'
+    agent_file_path = 'save/model/' + graph + '/' + agent_name + '.pth'
     os.makedirs(os.path.dirname(agent_file_path), exist_ok=True)
     torch.save(agent, agent_file_path)
     print('Agent saved to {}'.format(agent_file_path))
 
-def evaluate(agent_path, agent_name_list, env, sfc_generator, batch_size_list, episodes=10):
+def evaluate(agent_path, agent_name_list, env, sfc_generator, batch_size_list, episodes):
     agent_dict = {}
     for agent_name in agent_name_list:
         agent_file_path = agent_path + agent_name + '.pth'
@@ -78,7 +78,8 @@ def evaluate(agent_path, agent_name_list, env, sfc_generator, batch_size_list, e
         agent.reward_list = []
         agent.acceptance_ratio_list = []
         agent.sfc_latency_list = []
-        agent.node_resource_utilization_list = []
+        agent.exceeded_node_capacity_list = []
+        agent.exceeded_link_bandwidth_list = []
         agent.running_time_list = []
 
         agent.avg_placement_reward_list = []
@@ -87,7 +88,8 @@ def evaluate(agent_path, agent_name_list, env, sfc_generator, batch_size_list, e
         agent.avg_reward_list = []
         agent.avg_acceptance_ratio_list = []
         agent.avg_sfc_latency_list = []
-        agent.avg_node_resource_utilization_list = []
+        agent.avg_exceeded_node_capacity_list = []
+        agent.avg_exceeded_link_bandwidth_list = []
         agent.avg_running_time_list = []
         agent.actor.eval()
 
@@ -106,15 +108,16 @@ def evaluate(agent_path, agent_name_list, env, sfc_generator, batch_size_list, e
             source_dest_node_pairs = sfc_generator.get_source_dest_node_pairs()
             for agent in agent_dict.values():
                 agent_start_time = time.time()
-                avg_episode_reward, avg_acceptance_ratio, avg_sfc_latency, avg_node_resource_utilization = agent.test(env, sfc_list, sfc_state_list, source_dest_node_pairs)
+                agent.test(env, sfc_list, sfc_state_list, source_dest_node_pairs)
                 agent.running_time_list.append(time.time() - agent_start_time)
-                agent.placement_reward_list.append(np.mean(env.placement_reward_list))    # episode avg reward
-                agent.power_consumption_list.append(np.mean(env.power_consumption_list))
-                agent.exceeded_penalty_list.append(np.mean(env.exceeded_penalty_list))
-                agent.reward_list.append(avg_episode_reward)
-                agent.acceptance_ratio_list.append(avg_acceptance_ratio)
-                agent.sfc_latency_list.append(avg_sfc_latency)
-                agent.node_resource_utilization_list.append(avg_node_resource_utilization)
+                agent.placement_reward_list.append(np.sum(env.placement_reward_list))
+                agent.power_consumption_list.append(np.sum(env.power_consumption_list))
+                agent.exceeded_penalty_list.append(np.sum(env.exceeded_penalty_list))
+                agent.reward_list.append(np.sum(env.reward_list))
+                agent.acceptance_ratio_list.append(env.sfc_placed_num / batch_size)
+                agent.sfc_latency_list.append(np.mean(env.sfc_latency_list))
+                agent.exceeded_node_capacity_list.append(env.exceeded_node_capacity_list[-1])
+                agent.exceeded_link_bandwidth_list.append(env.exceeded_link_bandwidth_list[-1])
 
         for agent in agent_dict.values():
             agent.avg_placement_reward_list.append(np.mean(agent.placement_reward_list))    # iteration avg reward
@@ -123,7 +126,8 @@ def evaluate(agent_path, agent_name_list, env, sfc_generator, batch_size_list, e
             agent.avg_reward_list.append(np.mean(agent.reward_list))
             agent.avg_acceptance_ratio_list.append(np.mean(agent.acceptance_ratio_list))
             agent.avg_sfc_latency_list.append((np.mean(agent.sfc_latency_list)))
-            agent.avg_node_resource_utilization_list.append(np.mean(agent.node_resource_utilization_list))
+            agent.avg_exceeded_node_capacity_list.append(np.mean(agent.exceeded_node_capacity_list))
+            agent.avg_exceeded_link_bandwidth_list.append(np.mean(agent.exceeded_link_bandwidth_list))
             agent.avg_running_time_list.append(np.mean(agent.running_time_list))
 
             agent.placement_reward_list.clear()
@@ -132,7 +136,8 @@ def evaluate(agent_path, agent_name_list, env, sfc_generator, batch_size_list, e
             agent.reward_list.clear()
             agent.acceptance_ratio_list.clear()
             agent.sfc_latency_list.clear()
-            agent.node_resource_utilization_list.clear()
+            agent.exceeded_node_capacity_list.clear()
+            agent.exceeded_link_bandwidth_list.clear()
             agent.running_time_list.clear()
 
     evaluation_time = time.time() - start_time
@@ -140,7 +145,7 @@ def evaluate(agent_path, agent_name_list, env, sfc_generator, batch_size_list, e
 
     for agent_name in agent_name_list:
         agent = agent_dict[agent_name]
-        csv_file_path = 'save/result/evaluate/' + agent_name + '.csv'
+        csv_file_path = 'save/result/' + graph + '/evaluate/' + agent_name + '.csv'
         os.makedirs(os.path.dirname(csv_file_path), exist_ok=True)
         df = pd.DataFrame({
             'Number of SFC': batch_size_list,
@@ -150,7 +155,8 @@ def evaluate(agent_path, agent_name_list, env, sfc_generator, batch_size_list, e
             'Average Episode Reward': agent.avg_reward_list,
             'Average Acceptance Ratio': agent.avg_acceptance_ratio_list,
             'Average SFC End-to-End Latency': agent.avg_sfc_latency_list,
-            'Average Node Resource Utilization': agent.avg_node_resource_utilization_list,
+            'Average Exceeded Node Resource Usage': agent.avg_exceeded_node_capacity_list,
+            'Average Exceeded Link Bandwidth Usage': agent.avg_exceeded_link_bandwidth_list,
             'Average Running Time': agent.avg_running_time_list
         })
         df.to_csv(csv_file_path, index=False)
@@ -163,9 +169,11 @@ if __name__ == '__main__':
         device = torch.device('cpu')
 
     # initialization
-    G = nx.read_graphml('graph/Cogentco.graphml') # 197 nodes and 245 links
-    # G = nx.read_graphml('graph/Chinanet.graphml')   # 42 nodes and 66 links
-    env = environment.Environment(G)
+    graph = 'Cogentco' # 197 nodes and 245 links
+    # graph = 'Chinanet'    # 42 nodes and 66 links
+
+    G = nx.read_graphml('graph/' + graph + '.graphml')
+    env = Environment(G)
     sfc_generator = SFCBatchGenerator(config.BATCH_SIZE, config.MIN_SFC_LENGTH, config.MAX_SFC_LENGTH,
                                           config.NUM_VNF_TYPES, env.num_nodes)
 
@@ -180,17 +188,17 @@ if __name__ == '__main__':
 
     # train
     agent_list = [
-        # NCO(node_state_dim, vnf_state_dim, env.num_nodes, device), finish
-        # EnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, device), finish
-        # DRLSFCP(env.num_nodes, node_state_dim, vnf_state_dim, device), finish
-        # PPO(env.num_nodes, node_state_dim, vnf_state_dim, device) finish
+        NCO(node_state_dim, vnf_state_dim, env.num_nodes, device),
+        EnhancedNCO(env.num_nodes, node_state_dim, vnf_state_dim, device),
+        DRLSFCP(env.num_nodes, node_state_dim, vnf_state_dim, device),
+        PPO(env.num_nodes, node_state_dim, vnf_state_dim, device)
     ]
 
     # for agent in agent_list:
-    #     train(agent, env, sfc_generator, iteration=config.ITERATION)
+    #     train(agent, env, graph, sfc_generator, iteration=config.ITERATION)
 
     # evaluate
-    agent_path = 'save/model/'
+    agent_path = 'save/model/' + graph + '/'
     agent_name_list = [
         'NCO',
         'EnhancedNCO',
@@ -199,8 +207,11 @@ if __name__ == '__main__':
         ]
 
     batch_size_list = [10, 20, 30, 40, 50]
+    # batch_size_list = [9, 12, 15, 18, 21]
 
     evaluate(agent_path, agent_name_list, env, sfc_generator, batch_size_list, episodes=50)
 
-    plot.show_train_result('save/result/train', agent_name_list)
-    plot.show_evaluate_result('save/result/evaluate', agent_name_list)
+    result_path = 'save/result/' + graph
+
+    # plot.show_train_result(graph, result_path + '/train', agent_name_list)
+    plot.show_evaluate_result(graph, result_path + '/evaluate', agent_name_list)
