@@ -4,7 +4,6 @@ import argparse
 BATCH_SIZE = 20
 ITERATION = 2000
 EPISODE = 10    # fill episode * batch_size data into replay buffer
-LEARNING_RATE = 0.001
 
 NUM_VNF_TYPES = 8   # number of VNF types
 
@@ -29,7 +28,6 @@ parser = argparse.ArgumentParser(description='Configuration file')
 train_arg = parser.add_argument_group('train')
 train_arg.add_argument('--batch_size', type=int, default=BATCH_SIZE, help='batch size of training')
 train_arg.add_argument('--episode', type=int, default=EPISODE, help='number of epochs')
-train_arg.add_argument('--learning_rate', type=float, default=LEARNING_RATE, help='learning rate' )
 
 model_arg = parser.add_argument_group('model')
 model_arg.add_argument('--model', type=str, default='DDPG', help='agent model')
