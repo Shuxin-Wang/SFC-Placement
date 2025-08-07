@@ -116,8 +116,8 @@ def evaluate(agent_path, agent_name_list, env, sfc_generator, batch_size_list, e
                 agent.reward_list.append(np.sum(env.reward_list))
                 agent.acceptance_ratio_list.append(env.sfc_placed_num / batch_size)
                 agent.sfc_latency_list.append(np.mean(env.sfc_latency_list))
-                agent.exceeded_node_capacity_list.append(env.exceeded_node_capacity_list[-1])
-                agent.exceeded_link_bandwidth_list.append(env.exceeded_link_bandwidth_list[-1])
+                agent.exceeded_node_capacity_list.append(np.max((0, env.exceeded_node_capacity_list[-1])))
+                agent.exceeded_link_bandwidth_list.append(np.max((0, env.exceeded_link_bandwidth_list[-1])))
 
         for agent in agent_dict.values():
             agent.avg_placement_reward_list.append(np.mean(agent.placement_reward_list))    # iteration avg reward
