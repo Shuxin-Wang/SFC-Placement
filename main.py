@@ -76,7 +76,6 @@ def evaluate(agent_path, agent_name_list, graph, env, sfc_generator, batch_size_
         agent.placement_reward_list = []
         agent.power_consumption_list = []
         agent.exceeded_penalty_list = []
-        agent.reward_list = []
         agent.acceptance_ratio_list = []
         agent.sfc_latency_list = []
         agent.exceeded_node_capacity_list = []
@@ -86,7 +85,6 @@ def evaluate(agent_path, agent_name_list, graph, env, sfc_generator, batch_size_
         agent.avg_placement_reward_list = []
         agent.avg_power_consumption_list = []
         agent.avg_exceeded_penalty_list = []
-        agent.avg_reward_list = []
         agent.avg_acceptance_ratio_list = []
         agent.avg_sfc_latency_list = []
         agent.avg_exceeded_node_capacity_list = []
@@ -113,7 +111,6 @@ def evaluate(agent_path, agent_name_list, graph, env, sfc_generator, batch_size_
                 agent.placement_reward_list.append(np.sum(env.placement_reward_list))
                 agent.power_consumption_list.append(np.sum(env.power_consumption_list))
                 agent.exceeded_penalty_list.append(np.sum(env.exceeded_penalty_list))
-                agent.reward_list.append(np.sum(env.reward_list))
                 agent.acceptance_ratio_list.append(env.sfc_placed_num / batch_size)
                 agent.sfc_latency_list.append(np.mean(env.sfc_latency_list))
                 agent.exceeded_node_capacity_list.append(np.max((0, env.exceeded_node_capacity_list[-1])))
@@ -123,7 +120,6 @@ def evaluate(agent_path, agent_name_list, graph, env, sfc_generator, batch_size_
             agent.avg_placement_reward_list.append(np.mean(agent.placement_reward_list))    # iteration avg reward
             agent.avg_power_consumption_list.append(np.mean(agent.power_consumption_list))
             agent.avg_exceeded_penalty_list.append(np.mean(agent.exceeded_penalty_list))
-            agent.avg_reward_list.append(np.mean(agent.reward_list))
             agent.avg_acceptance_ratio_list.append(np.mean(agent.acceptance_ratio_list))
             agent.avg_sfc_latency_list.append((np.mean(agent.sfc_latency_list)))
             agent.avg_exceeded_node_capacity_list.append(np.mean(agent.exceeded_node_capacity_list))
@@ -133,7 +129,6 @@ def evaluate(agent_path, agent_name_list, graph, env, sfc_generator, batch_size_
             agent.placement_reward_list.clear()
             agent.power_consumption_list.clear()
             agent.exceeded_penalty_list.clear()
-            agent.reward_list.clear()
             agent.acceptance_ratio_list.clear()
             agent.sfc_latency_list.clear()
             agent.exceeded_node_capacity_list.clear()
@@ -152,7 +147,6 @@ def evaluate(agent_path, agent_name_list, graph, env, sfc_generator, batch_size_
             'Average Placement Reward': agent.avg_placement_reward_list,
             'Average Power Consumption': agent.avg_power_consumption_list,
             'Average Exceeded Penalty': agent.avg_exceeded_penalty_list,
-            'Average Episode Reward': agent.avg_reward_list,
             'Average Acceptance Ratio': agent.avg_acceptance_ratio_list,
             'Average SFC End-to-End Latency': agent.avg_sfc_latency_list,
             'Average Exceeded Node Resource Usage': agent.avg_exceeded_node_capacity_list,
