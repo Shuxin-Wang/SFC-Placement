@@ -66,11 +66,12 @@ def train(agent, env, graph, sfc_generator, iteration):
     torch.save(agent, agent_file_path)
     print('Agent saved to {}'.format(agent_file_path))
 
-def evaluate(agent_path, agent_name_list, env, sfc_generator, batch_size_list, episodes):
+def evaluate(agent_path, agent_name_list, graph, env, sfc_generator, batch_size_list, episodes):
     agent_dict = {}
     for agent_name in agent_name_list:
         agent_file_path = agent_path + agent_name + '.pth'
         agent = torch.load(agent_file_path, weights_only=False)
+        agent.actor.eval()
 
         agent.placement_reward_list = []
         agent.power_consumption_list = []
@@ -91,7 +92,6 @@ def evaluate(agent_path, agent_name_list, env, sfc_generator, batch_size_list, e
         agent.avg_exceeded_node_capacity_list = []
         agent.avg_exceeded_link_bandwidth_list = []
         agent.avg_running_time_list = []
-        agent.actor.eval()
 
         agent_dict[agent_name] = agent
 
@@ -169,8 +169,8 @@ if __name__ == '__main__':
         device = torch.device('cpu')
 
     # initialization
-    graph = 'Cogentco' # 197 nodes and 245 links
-    # graph = 'Chinanet'    # 42 nodes and 66 links
+    # graph = 'Cogentco' # 197 nodes and 245 links
+    graph = 'Chinanet'    # 42 nodes and 66 links
 
     G = nx.read_graphml('graph/' + graph + '.graphml')
     env = Environment(G)
@@ -194,8 +194,8 @@ if __name__ == '__main__':
         PPO(env.num_nodes, node_state_dim, vnf_state_dim, device)
     ]
 
-    # for agent in agent_list:
-    #     train(agent, env, graph, sfc_generator, iteration=config.ITERATION)
+    for agent in agent_list:
+        train(agent, env, graph, sfc_generator, iteration=config.ITERATION)
 
     # evaluate
     agent_path = 'save/model/' + graph + '/'
@@ -206,12 +206,12 @@ if __name__ == '__main__':
         'PPO',
         ]
 
-    batch_size_list = [10, 20, 30, 40, 50]
-    # batch_size_list = [9, 12, 15, 18, 21]
+    # batch_size_list = [60, 70, 80, 90, 100]
+    batch_size_list = [15, 20, 25, 30, 35]
 
-    evaluate(agent_path, agent_name_list, env, sfc_generator, batch_size_list, episodes=50)
+    evaluate(agent_path, agent_name_list, graph, env, sfc_generator, batch_size_list, episodes=50)
 
     result_path = 'save/result/' + graph
 
-    # plot.show_train_result(graph, result_path + '/train', agent_name_list)
+    plot.show_train_result(graph, result_path + '/train', agent_name_list)
     plot.show_evaluate_result(graph, result_path + '/evaluate', agent_name_list)
