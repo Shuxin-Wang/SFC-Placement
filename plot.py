@@ -111,7 +111,8 @@ if __name__ == '__main__':
         'DRLSFCP',
         'PPO',
         ]
+
     # show_train_result('Cogentco', 'save/result/Cogentco/train', agent_name_list)
-    show_evaluate_result('Cogentco', 'save/result/Cogentco/evaluate', agent_name_list)
+    # show_evaluate_result('Cogentco', 'save/result/Cogentco/evaluate', agent_name_list)
     # show_train_result('Chinanet', 'save/result/Chinanet/train', agent_name_list)
     # show_evaluate_result('Chinanet', 'save/result/Chinanet/evaluate', agent_name_list)
