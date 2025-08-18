@@ -85,21 +85,3 @@ class SFCBatchGenerator:
             return [VNF_SIZE[vnf], VNF_LATENCY[vnf], VNF_BANDWIDTH[vnf]]
         else:
             return [0, 0, 0]
-
-if __name__ == '__main__':
-
-    random.seed(27)
-    G = nx.read_graphml('graph/Cogentco.graphml')
-    env = Environment(G)
-    sfc_generator = SFCBatchGenerator(config.BATCH_SIZE, config.MIN_SFC_LENGTH, config.MAX_SFC_LENGTH, config.NUM_VNF_TYPES, env.num_nodes)
-
-    sfc_generator.get_sfc_batch()
-    # sfc_generator.show_sfc_batch()
-
-    # get sfc states test
-    test_states = sfc_generator.get_sfc_states()
-    print('test states:\n', test_states)
-
-    # get sfc masks test
-    # sfc_masks = sfc_generator.get_sfc_masks()
-    # print('sfc masks:\n', sfc_masks)
