@@ -4,91 +4,90 @@ import torch.nn.functional as F
 from torch_geometric.nn import GATConv, GCNConv
 from torch_geometric.utils import to_dense_batch
 from torch_geometric.data import Batch
-import config
 
-class GAT(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_heads):  # hidden_dim = N * num_heads
-        super().__init__()
-        self.gat1 = GATConv(input_dim, hidden_dim, heads=num_heads)
-        self.gat2 = GATConv(hidden_dim * num_heads, output_dim, heads=1)
+# class GAT(nn.Module):
+#     def __init__(self, input_dim, hidden_dim, output_dim, num_heads):  # hidden_dim = N * num_heads
+#         super().__init__()
+#         self.gat1 = GATConv(input_dim, hidden_dim, heads=num_heads)
+#         self.gat2 = GATConv(hidden_dim * num_heads, output_dim, heads=1)
+#
+#     def forward(self, data):
+#         # data = Batch.from_data_list(net_states_list)
+#         # net_state_list = [Data(x, edge_list), Data(x, edge_list)...]
+#         x = data.x
+#         edge_index = data.edge_index
+#
+#         x = self.gat1(x, edge_index)
+#         x = F.elu(x)
+#         x = self.gat2(x, edge_index)
+#         return x
 
-    def forward(self, data):
-        # data = Batch.from_data_list(net_states_list)
-        # net_state_list = [Data(x, edge_list), Data(x, edge_list)...]
-        x = data.x
-        edge_index = data.edge_index
+# class ScaledDotProductAttention(nn.Module):
+#     def __init__(self, temperature, dropout=0.1):
+#         super().__init__()
+#         self.temperature = temperature
+#         self.dropout = nn.Dropout(dropout)
+#
+#     def forward(self, q, k, v, mask=None):
+#         # batch_size, num_heads, len_q, dim_k
+#         attention = torch.matmul(q / self.temperature, k.transpose(2, 3))  # len_k <-> dim_k
+#         if mask is not None:
+#             attention = attention.masked_fill(mask == 0, -1e9)
+#         attention = self.dropout(F.softmax(attention, dim=-1))
+#         # batch_size, num_heads, len_q, dim_v
+#         output = torch.matmul(attention, v)
+#
+#         return output, attention
 
-        x = self.gat1(x, edge_index)
-        x = F.elu(x)
-        x = self.gat2(x, edge_index)
-        return x
-
-class ScaledDotProductAttention(nn.Module):
-    def __init__(self, temperature, dropout=0.1):
-        super().__init__()
-        self.temperature = temperature
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, q, k, v, mask=None):
-        # batch_size, num_heads, len_q, dim_k
-        attention = torch.matmul(q / self.temperature, k.transpose(2, 3))  # len_k <-> dim_k
-        if mask is not None:
-            attention = attention.masked_fill(mask == 0, -1e9)
-        attention = self.dropout(F.softmax(attention, dim=-1))
-        # batch_size, num_heads, len_q, dim_v
-        output = torch.matmul(attention, v)
-
-        return output, attention
-
-class MultiheadAttention(nn.Module):
-    def __init__(self, dim_model, dim_k, dim_v, num_heads, dropout=0.1):  # dim_model = dim_k * num_heads
-        super().__init__()
-
-        self.num_heads = num_heads
-        self.embed_dim = dim_model
-        self.dim_q = dim_k
-        self.dim_k = dim_k
-        self.dim_v = dim_v
-
-        self.W_qs = nn.Linear(dim_model, num_heads * dim_k, bias=False)
-        self.W_ks = nn.Linear(dim_model, num_heads * dim_k, bias=False)
-        self.W_vs = nn.Linear(num_heads * dim_v, dim_model, bias=False)
-        self.fc = nn.Linear(num_heads * dim_v, dim_model, bias=False)
-
-        self.attention = ScaledDotProductAttention(temperature=dim_k ** 0.5)
-
-        self.dropout = nn.Dropout(dropout)
-        self.layer_norm = nn.LayerNorm(dim_model, eps=1e-6)
-
-    def forward(self, q, k, v, mask=None):
-        # batch_size, len_q, dim_model
-        dim_k, dim_v, num_heads = self.dim_k, self.dim_v, self.num_heads
-        batch_size, len_q, len_k, len_v = q.size(0), q.size(1), k.size(1), v.size(1)
-
-        residual = q
-
-        # batch_size, len_q, num_heads, dim_k
-        q = self.W_qs(q).view(batch_size, len_q, num_heads, dim_k)
-        k = self.W_ks(k).view(batch_size, len_k, num_heads, dim_k)
-        v = self.W_vs(v).view(batch_size, len_v, num_heads, dim_v)
-
-        # batch_size, num_heads, len_q, dim_k
-        q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
-
-        # batch_size, 1, len_q, dim_k
-        if mask is not None:
-            mask = mask.unsqueeze(1)
-
-        q, attention = self.attention(q, k, v, mask=mask)
-
-        # batch_size, len_q, num_heads * dim_k
-        q = q.transpose(1, 2).contiguous().view(batch_size, len_q, -1)
-        q = self.dropout(self.fc(q))
-        q += residual
-
-        q = self.layer_norm(q)
-
-        return q, attention
+# class MultiheadAttention(nn.Module):
+#     def __init__(self, dim_model, dim_k, dim_v, num_heads, dropout=0.1):  # dim_model = dim_k * num_heads
+#         super().__init__()
+#
+#         self.num_heads = num_heads
+#         self.embed_dim = dim_model
+#         self.dim_q = dim_k
+#         self.dim_k = dim_k
+#         self.dim_v = dim_v
+#
+#         self.W_qs = nn.Linear(dim_model, num_heads * dim_k, bias=False)
+#         self.W_ks = nn.Linear(dim_model, num_heads * dim_k, bias=False)
+#         self.W_vs = nn.Linear(num_heads * dim_v, dim_model, bias=False)
+#         self.fc = nn.Linear(num_heads * dim_v, dim_model, bias=False)
+#
+#         self.attention = ScaledDotProductAttention(temperature=dim_k ** 0.5)
+#
+#         self.dropout = nn.Dropout(dropout)
+#         self.layer_norm = nn.LayerNorm(dim_model, eps=1e-6)
+#
+#     def forward(self, q, k, v, mask=None):
+#         # batch_size, len_q, dim_model
+#         dim_k, dim_v, num_heads = self.dim_k, self.dim_v, self.num_heads
+#         batch_size, len_q, len_k, len_v = q.size(0), q.size(1), k.size(1), v.size(1)
+#
+#         residual = q
+#
+#         # batch_size, len_q, num_heads, dim_k
+#         q = self.W_qs(q).view(batch_size, len_q, num_heads, dim_k)
+#         k = self.W_ks(k).view(batch_size, len_k, num_heads, dim_k)
+#         v = self.W_vs(v).view(batch_size, len_v, num_heads, dim_v)
+#
+#         # batch_size, num_heads, len_q, dim_k
+#         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
+#
+#         # batch_size, 1, len_q, dim_k
+#         if mask is not None:
+#             mask = mask.unsqueeze(1)
+#
+#         q, attention = self.attention(q, k, v, mask=mask)
+#
+#         # batch_size, len_q, num_heads * dim_k
+#         q = q.transpose(1, 2).contiguous().view(batch_size, len_q, -1)
+#         q = self.dropout(self.fc(q))
+#         q += residual
+#
+#         q = self.layer_norm(q)
+#
+#         return q, attention
 
 class TransformerEncoder(nn.Module):
     def __init__(self, dim_model):
@@ -100,35 +99,36 @@ class TransformerEncoder(nn.Module):
         return self.encoder(sfc_state, src_key_padding_mask=src_key_padding_mask)
 
 class StateNetwork(nn.Module):
-    def __init__(self,num_nodes, net_state_dim, vnf_state_dim, hidden_dim=64):
+    def __init__(self, node_state_dim, vnf_state_dim, num_nodes, max_sfc_length, hidden_dim=64):
         super().__init__()
-        self.net_state_dim = net_state_dim
-        self.sfc_attention = TransformerEncoder(dim_model=hidden_dim)
-        self.pos_embed = nn.Embedding(config.MAX_SFC_LENGTH + 2, hidden_dim)
+        self.node_state_dim = node_state_dim
+        self.sfc_encoder = TransformerEncoder(dim_model=hidden_dim)
+        self.pos_embed = nn.Embedding(max_sfc_length + 2 + 1, hidden_dim)    # [sfc, src_dest_node_pair, reliability_requirement]
         self.sfc_linear = nn.Linear(vnf_state_dim, hidden_dim)
-        self.net_linear = nn.Linear(4 * net_state_dim, hidden_dim)
+        self.net_linear = nn.Linear(4 * node_state_dim, hidden_dim)
         self.node_embed = nn.Embedding(num_nodes, vnf_state_dim, dtype=torch.float32)
+        self.reliability_fc = nn.Linear(1, vnf_state_dim)
 
-        self.query = nn.Linear(net_state_dim, 4 * net_state_dim)
-        self.key = nn.Linear(net_state_dim, 4 * net_state_dim)
-        self.value = nn.Linear(net_state_dim, 4 * net_state_dim)
+        self.query = nn.Linear(node_state_dim, 4 * node_state_dim)
+        self.key = nn.Linear(node_state_dim, 4 * node_state_dim)
+        self.value = nn.Linear(node_state_dim, 4 * node_state_dim)
 
     def forward(self, state):
-        net_state, sfc_state, source_dest_node_pair = zip(*state)
+        net_state, sfc_state, source_dest_node_pair, reliability_requirement = zip(*state)
         net_states_list = list(net_state)
         sfc_states_list = list(sfc_state)
 
         # net state self attention
         batch_net_state = Batch.from_data_list(net_states_list)  # net state = DataBatch(x, edge_index, batch, ptr)
-        batch_net_state, _ = to_dense_batch(batch_net_state.x, batch_net_state.batch)    # batch_size * num_nodes * net_state_dim
+        batch_net_state, _ = to_dense_batch(batch_net_state.x, batch_net_state.batch)    # batch_size * num_nodes * node_state_dim
 
-        Q = self.query(batch_net_state)     # batch_size * num_nodes * net_state_dim
-        K = self.key(batch_net_state)   # batch_size * num_nodes * net_state_dim
-        V = self.value(batch_net_state) # batch_size * num_nodes * net_state_dim
+        Q = self.query(batch_net_state)     # batch_size * num_nodes * node_state_dim
+        K = self.key(batch_net_state)   # batch_size * num_nodes * node_state_dim
+        V = self.value(batch_net_state) # batch_size * num_nodes * node_state_dim
 
-        scores = torch.matmul(Q, K.transpose(1, 2)) / (self.net_state_dim ** 0.5) # batch_size * num_nodes * num_nodes
+        scores = torch.matmul(Q, K.transpose(1, 2)) / (self.node_state_dim ** 0.5) # batch_size * num_nodes * num_nodes
         attn_weights = torch.softmax(scores, dim=-1)    # batch_size * num_nodes * num_nodes
-        batch_net_state = torch.matmul(attn_weights, V) # batch_size * num_nodes * net_state_dim
+        batch_net_state = torch.matmul(attn_weights, V) # batch_size * num_nodes * node_state_dim
         batch_net_state = self.net_linear(batch_net_state)  # batch_size * num_nodes * hidden_dim
 
         batch_sfc_state = torch.stack(sfc_states_list, dim=0)
@@ -138,23 +138,26 @@ class StateNetwork(nn.Module):
         batch_src_emb = batch_node_pair_emb[:, 0:1, :]
         batch_dst_emb = batch_node_pair_emb[:, 1:2, :]
 
-        batch_sfc = torch.cat((batch_src_emb, batch_sfc_state, batch_dst_emb), dim=1)   # batch_size * (max_sfc_length + 2) * vnf_state_dim
+        batch_reliability_requirement = torch.stack(reliability_requirement, dim=0).unsqueeze(2)    # batch_size * 1 * 1
+        batch_reliability_requirement = self.reliability_fc(batch_reliability_requirement)  # batch_size * 1 * vnf_state_dim
 
-        mask = (batch_sfc.abs().sum(dim=-1) == 0)   # batch_size * (max_sfc_length + 2)
+        batch_sfc = torch.cat((batch_src_emb, batch_sfc_state, batch_dst_emb, batch_reliability_requirement), dim=1)   # batch_size * (max_sfc_length + 2 + 1) * vnf_state_dim
 
-        batch_sfc = self.sfc_linear(batch_sfc)    # batch_size * (max_sfc_length + 2) * hidden_dim
+        mask = (batch_sfc.abs().sum(dim=-1) == 0)   # batch_size * (max_sfc_length + 2 + 1)
+
+        batch_sfc = self.sfc_linear(batch_sfc)    # batch_size * (max_sfc_length + 2 + 1) * hidden_dim
 
         # position embedding
         batch_size, seq_len, _ = batch_sfc.shape
         device = batch_sfc.device
         pos_ids = torch.arange(seq_len, device=device).unsqueeze(0).expand(batch_size, seq_len)
-        pos_embed = self.pos_embed(pos_ids) # batch_size * (max_sfc_length + 2) * hidden_dim
+        pos_embed = self.pos_embed(pos_ids) # batch_size * (max_sfc_length + 2 + 1) * hidden_dim
         batch_sfc = batch_sfc + pos_embed
 
-        batch_sfc_attention = self.sfc_attention(batch_sfc, src_key_padding_mask=mask) # batch_size * (max_sfc_length + 2) * hidden_dim
+        batch_sfc_encoded = self.sfc_encoder(batch_sfc, src_key_padding_mask=mask) # batch_size * (max_sfc_length + 2 + 1) * hidden_dim
 
-        # batch_size * (node_num + max_sfc_length + 2) * hidden_dim
-        batch_state = torch.cat((batch_net_state, batch_sfc_attention), dim=1)
+        # batch_size * (node_num + max_sfc_length + 2 + 1) * hidden_dim
+        batch_state = torch.cat((batch_net_state, batch_sfc_encoded), dim=1)
         return batch_state
 
 class GCNConvNet(nn.Module):

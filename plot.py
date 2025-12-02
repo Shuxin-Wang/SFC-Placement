@@ -104,6 +104,11 @@ def show_evaluate_result(graph, dir_path, agent_name_list):
 
     plt.show()
 
+def show_results(runner):
+    agent_name_list = [agent.__class__.__name__ for agent in runner.agent_list]
+    show_train_result(runner.graph, runner.result_path + '/train', agent_name_list)
+    show_evaluate_result(runner.graph, runner.result_path + '/evaluate', agent_name_list)
+
 if __name__ == '__main__':
     agent_name_list = [
         'NCO',

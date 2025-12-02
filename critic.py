@@ -2,29 +2,30 @@ import torch
 import torch.nn as nn
 from torch_geometric.utils import to_dense_batch
 from torch_geometric.data import Batch
-from module import StateNetwork, GCNConvNet, Attention, Encoder, TransformerEncoder,GAT
-import config
+from module import StateNetwork, GCNConvNet, Attention, Encoder
+import utils
 
 class StateNetworkCritic(nn.Module):
-    def __init__(self, net_state_dim, vnf_state_dim, num_nodes, hidden_dim=256):
+    def __init__(self, node_state_dim, vnf_state_dim, num_nodes, max_sfc_length, hidden_dim=256):
         super().__init__()
         self.num_nodes = num_nodes
         self.vnf_state_dim = vnf_state_dim
-        self.state_network = StateNetwork(num_nodes, net_state_dim, vnf_state_dim)
+        self.max_sfc_length = max_sfc_length
+        self.state_network = StateNetwork(node_state_dim, vnf_state_dim, num_nodes, max_sfc_length)
         self.attn = nn.Linear(num_nodes, 1)
         self.fc = nn.Sequential(
-            nn.Linear(num_nodes * config.MAX_SFC_LENGTH, 512),
+            nn.Linear(num_nodes * max_sfc_length, 2 * hidden_dim),
             nn.ReLU(),
-            nn.Linear(512, 256),
+            nn.Linear(2 * hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(256, 1)
+            nn.Linear(hidden_dim, 1)
         )
 
     def forward(self, state):
         state_attention = self.state_network(state)
         net_tokens = state_attention[:, :self.num_nodes, :]  # batch_size * num_nodes * vnf_state_dim
-        sfc_tokens = state_attention[:, self.num_nodes:, :]  # batch_size * (max_sfc_length + 2) * vnf_state_dim
-        vnf_tokens = sfc_tokens[:, 1:-1, :]  # batch_size * max_sfc_length * hidden_dim
+        sfc_tokens = state_attention[:, self.num_nodes:, :]  # batch_size * (max_sfc_length + 2 + 1) * vnf_state_dim
+        vnf_tokens = sfc_tokens[:, 1:-2, :]  # batch_size * max_sfc_length * hidden_dim
 
         logits = torch.matmul(vnf_tokens, net_tokens.transpose(1, 2))  # batch_size * max_sfc_length * num_nodes
 
@@ -32,39 +33,12 @@ class StateNetworkCritic(nn.Module):
         q = self.fc(logits)
         return q
 
-class StateNetworkCriticAction(nn.Module):
-    def __init__(self, net_state_dim, vnf_state_dim, num_nodes, hidden_dim=64):
-        super().__init__()
-        self.num_nodes = num_nodes
-        self.state_network = StateNetwork(num_nodes, net_state_dim, vnf_state_dim)
-        self.fc = nn.Linear(num_nodes, 1)
-        self.fc2 = nn.Linear(2 * num_nodes, 1)
-
-    def forward(self, state, action, mask=None):
-        net_state, sfc_state, source_dest_node_pair = zip(*state)
-        # action: batch_size * max_vnf_length
-        state = self.state_network(state)  # batch_size * (node_num + max_sfc_length) * vnf_state_dim
-        net_embed = state[:, :self.num_nodes, :] # batch_size * num_nodes * vnf_state_dim
-        sfc_embed = state[:, self.num_nodes:, :] # batch_size * max_sfc_length * vnf_state_dim
-
-        state = torch.matmul(sfc_embed, net_embed.transpose(1, 2)) # batch_size * max_sfc_length * num_nodes
-
-        if action.dim() == 2:
-            action = action.unsqueeze(2).to(dtype=torch.float32)
-            logits = torch.matmul(state.transpose(1, 2), action).squeeze(2)    # batch_size * num_nodes
-            q = self.fc(logits)
-        else:
-            x = torch.cat((state, action), dim=-1)
-            logits = self.fc2(x)
-            q = logits.sum(dim=1)
-
-        return q
-
 class LSTMCritic(nn.Module):
     def __init__(self, node_state_dim, vnf_state_dim, num_nodes, hidden_dim):
         super().__init__()
         self.vnf_state_dim = vnf_state_dim
         self.node_embed = nn.Embedding(num_nodes, vnf_state_dim)
+        self.reliability_fc = nn.Linear(1, vnf_state_dim)
         self.net_fc = nn.Linear(node_state_dim, hidden_dim)
         self.embedding = nn.Linear(vnf_state_dim, hidden_dim)
         self.encoder = nn.LSTM(
@@ -76,7 +50,7 @@ class LSTMCritic(nn.Module):
         self.fc_out = nn.Linear(hidden_dim, 1)
 
     def forward(self, state):
-        net_state, sfc_state, source_dest_node_pair = zip(*state)
+        net_state, sfc_state, source_dest_node_pair, reliability_requirement = utils.unpack_state(state)
 
         net_states_list = list(net_state)
         batch_net_state = Batch.from_data_list(net_states_list)  # net state = DataBatch(x, edge_index, batch, ptr)
@@ -84,62 +58,53 @@ class LSTMCritic(nn.Module):
                                             batch_net_state.batch)  # batch_size * num_nodes * node_state_dim
         batch_net_state = self.net_fc(batch_net_state)  # batch_size * num_nodes * hidden_dim
 
-        if len(sfc_state) > 1:
-            sfc_state = torch.stack(sfc_state, dim=0)
-            source_dest_node_pair = torch.stack(source_dest_node_pair, dim=0).unsqueeze(2)
-        else:
-            sfc_state = torch.tensor(sfc_state[0]).unsqueeze(0)
-            source_dest_node_pair = torch.tensor(source_dest_node_pair[0]).unsqueeze(0)
         source_dest_node_pair = self.node_embed(source_dest_node_pair.squeeze(-1).to(torch.long))  # batch_size * 2 * vnf_state_dim
-        sfc = torch.cat((sfc_state, source_dest_node_pair), dim=1)  # batch_size * (max_sfc_length + 2) * vnf_state_dim
+        reliability_requirement = self.reliability_fc(reliability_requirement)  # batch_size * 1 * vnf_state_dim
+        sfc = torch.cat((sfc_state, source_dest_node_pair, reliability_requirement), dim=1)  # batch_size * (max_sfc_length + 2 + 1) * vnf_state_dim
         embedded = self.embedding(sfc)
 
         encoder_input = torch.cat((embedded, batch_net_state),
-                                  dim=1)  # batch_size * (max_sfc_length + 2 + num_nodes) * hidden_dim
+                                  dim=1)  # batch_size * (max_sfc_length + 2 + 1 + num_nodes) * hidden_dim
 
         _, (h, _) = self.encoder(encoder_input)
         value = self.fc_out(h[-1])  # h[-1]: batch_size * 1
         return value  # batch_size * 1
 
 class DecoderCritic(nn.Module):
-    def __init__(self,num_nodes, net_state_dim, vnf_state_dim, embedding_dim=64):
-        super().__init__()
+    def __init__(self, node_state_dim, vnf_state_dim, num_nodes, max_sfc_length, embedding_dim=64):
         super().__init__()
         self.vnf_state_dim = vnf_state_dim
+        self.max_sfc_length = max_sfc_length
+
         self.node_embed = nn.Embedding(num_nodes, vnf_state_dim)
+        self.reliability_fc = nn.Linear(1, vnf_state_dim)
         self.encoder = Encoder(vnf_state_dim, embedding_dim=embedding_dim)  # sfc_state
 
         self.att = Attention(embedding_dim) # placement
-        self.gcn = GCNConvNet(net_state_dim, embedding_dim) # net_state
-        self.mlp = nn.Linear(embedding_dim, config.MAX_SFC_LENGTH)
+        self.gcn = GCNConvNet(node_state_dim, embedding_dim) # net_state
+        self.mlp = nn.Linear(embedding_dim, self.max_sfc_length)
         self.gru = nn.GRU(embedding_dim, embedding_dim) # decoder
         self.fc = nn.Linear(num_nodes, 1)
 
         self._last_hidden_state = None
 
     def forward(self, state):
-        net_state, sfc_state, source_dest_node_pair = zip(*state)
+        net_state, sfc_state, source_dest_node_pair, reliability_requirement = utils.unpack_state(state)
+
         net_state_list = list(net_state)
         batch_net_state = Batch.from_data_list(net_state_list)
 
         net_state = self.gcn(batch_net_state)
         net_state = net_state.reshape(len(state), -1, net_state.shape[-1])  # batch_size * num_nodes * embedding_dim
 
-        if len(sfc_state) > 1:
-            sfc_state = torch.stack(sfc_state, dim=0)
-            source_dest_node_pair = torch.stack(source_dest_node_pair, dim=0).unsqueeze(2)
-        else:
-            sfc_state = sfc_state[0].unsqueeze(0)
-            source_dest_node_pair = source_dest_node_pair[0].unsqueeze(0)
+        sfc_state, source_dest_node_pair, reliability_requirement = utils.reshape_state_batch(sfc_state, source_dest_node_pair, reliability_requirement, self.vnf_state_dim, self.max_sfc_length)
 
-        batch_size = sfc_state.shape[0]
-        sfc_state = sfc_state.view(batch_size, config.MAX_SFC_LENGTH, self.vnf_state_dim)
-        source_dest_node_pair = source_dest_node_pair.view(batch_size, 2)
         source_dest_node_pair = self.node_embed(source_dest_node_pair.to(torch.long))  # batch_size * 2 * vnf_state_dim
-        sfc = torch.cat((sfc_state, source_dest_node_pair), dim=1)  # batch_size * (max_sfc_length + 2) * vnf_state_dim
+        reliability_requirement = self.reliability_fc(reliability_requirement)  # batch_size * 1 * vnf_state_dim
+        sfc = torch.cat((sfc_state, source_dest_node_pair, reliability_requirement), dim=1)  # batch_size * (max_sfc_length + 2 + 1) * vnf_state_dim
 
-        encoder_output, encoder_hidden_state = self.encoder(
-            sfc)  # (max_sfc_length + 2) * batch_size * embedding_dim, 1 * batch_size * embedding_dim
+        # (max_sfc_length + 2 + 1) * batch_size * embedding_dim, 1 * batch_size * embedding_dim
+        encoder_output, encoder_hidden_state = self.encoder(sfc)
 
         if self._last_hidden_state is not None:
             net_state = net_state + self._last_hidden_state.permute(1, 0, 2)
