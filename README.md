@@ -27,20 +27,12 @@ pip install -r requirements.txt
 
 ## Quick Start
 
-In `main.py`, two network topologies and two `batch_size_list` options are available. By default, agents are trained and evaluated on **Chinanet**. To switch to another topology or `batch_size_list`, simply comment out the corresponding lines in the code.
-
-```python
-# graph = 'Cogentco' # 197 nodes and 245 links
-graph = 'Chinanet'    # 42 nodes and 66 links
-
-# batch_size_list = [60, 70, 80, 90, 100]
-batch_size_list = [15, 20, 25, 30, 35]
-```
-
 You can run the following code to train and evaluate all the agents.
 
 ```
 python ./main.py
 ```
+
+To configure the parameters, you can view all available options in `config.py`. 
 
 All trained agent models are stored in `save/model`. The corresponding training and evaluation results, along with performance plots, are saved in `save/result`.
