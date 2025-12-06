@@ -8,7 +8,7 @@ import warnings
 import plot
 from environment import Environment
 from sfc import SFCBatchGenerator
-from agent import NCO, DRLSFCP, EnhancedNCO, PPO
+from agent import NCO, DRLSFCP, EnhancedNCO, PPO, ACED
 
 class ExperimentRunner:
     def __init__(self, cfg):
@@ -47,7 +47,8 @@ class ExperimentRunner:
                 NCO(self.cfg, self.env, self.sfc_generator, self.device),
                 EnhancedNCO(self.cfg, self.env, self.sfc_generator, self.device),
                 DRLSFCP(self.cfg, self.env, self.sfc_generator, self.device),
-                PPO(self.cfg, self.env, self.sfc_generator, self.device)
+                PPO(self.cfg, self.env, self.sfc_generator, self.device),
+                ACED(self.cfg, self.env, self.sfc_generator, self.device)
             ]
         elif self.model == 'NCO':
             self.agent_list = [
@@ -64,6 +65,10 @@ class ExperimentRunner:
         elif self.model == 'PPO':
             self.agent_list = [
                 PPO(self.cfg, self.env, self.sfc_generator, self.device)
+            ]
+        elif self.model == 'ACED':
+            self.agent_list = [
+                ACED(self.cfg, self.env, self.sfc_generator, self.device)
             ]
         else:
             raise ValueError('Invalid model name.')

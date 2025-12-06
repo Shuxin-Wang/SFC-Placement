@@ -2,26 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.data import Batch
-from module import StateNetwork, GCNConvNet, Attention, Encoder
+from module import StateNetwork, GCNConvNet, Attention, Encoder, ACEDStateNetwork
 import utils
 from torch_geometric.utils import to_dense_batch
-
-class StateNetworkActor(nn.Module):
-    def __init__(self, node_state_dim, vnf_state_dim, num_nodes, max_sfc_length):
-        super().__init__()
-        self.num_nodes = num_nodes
-        self.state_network = StateNetwork(node_state_dim, vnf_state_dim, num_nodes, max_sfc_length)
-
-    def forward(self, state):
-        state_attention = self.state_network(state)
-        net_tokens = state_attention[:, :self.num_nodes, :] # batch_size * num_nodes * hidden_dim
-        sfc_tokens = state_attention[:, self.num_nodes:, :] # batch_size * (max_sfc_length + 2 + 1) * hidden_dim
-        # [source_node_token, vnf_tokens, dest_node_token, reliability_token]
-        vnf_tokens = sfc_tokens[:, 1:-2, :] # batch_size * max_sfc_length * hidden_dim
-
-        logits = torch.matmul(vnf_tokens, net_tokens.transpose(1, 2))   # batch_size * max_sfc_length * num_nodes
-        probs = F.softmax(logits, dim=-1)
-        return logits, probs
 
 class Seq2SeqActor(nn.Module):
     def __init__(self, node_state_dim, vnf_state_dim, num_nodes, max_sfc_length, hidden_dim, num_layers):
@@ -52,13 +35,13 @@ class Seq2SeqActor(nn.Module):
     def forward(self, state):
         net_state, sfc_state, source_dest_node_pair, reliability_requirement = utils.unpack_state(state)
 
-        net_states_list = list(net_state)
-        batch_net_state = Batch.from_data_list(net_states_list)  # net state = DataBatch(x, edge_index, batch, ptr)
+        net_states_list = list(net_state)   # net state = DataBatch(x, edge_index, batch, ptr)
+        batch_net_state = Batch.from_data_list(net_states_list)
         batch_net_state, _ = to_dense_batch(batch_net_state.x,
                                             batch_net_state.batch)  # batch_size * num_nodes * node_state_dim
         batch_net_state = self.net_fc(batch_net_state)  # batch_size * num_nodes * hidden_dim
 
-        sfc_state, source_dest_node_pair, reliability_requirement = utils.reshape_state_batch(sfc_state, source_dest_node_pair, reliability_requirement, self.vnf_state_dim, self.max_sfc_length)
+        sfc_state, source_dest_node_pair, reliability_requirement = utils.reshape_sfc_state_batch(sfc_state, source_dest_node_pair, reliability_requirement, self.vnf_state_dim, self.max_sfc_length)
 
         source_dest_node_pair = self.node_emb(source_dest_node_pair.to(torch.long))  # batch_size * 2 * vnf_state_dim
         reliability_requirement = self.reliability_fc(reliability_requirement)
@@ -86,7 +69,7 @@ class DecoderActor(nn.Module):
 
         self.att = Attention(embedding_dim) # placement
         self.gcn = GCNConvNet(node_state_dim, embedding_dim) # net_state
-        self.mlp = nn.Linear(embedding_dim, self.max_sfc_length)
+        self.mlp = nn.Linear(embedding_dim, max_sfc_length)
         self.gru = nn.GRU(embedding_dim, embedding_dim) # decoder
 
         self._last_hidden_state = None
@@ -100,7 +83,7 @@ class DecoderActor(nn.Module):
         net_state = self.gcn(batch_net_state)
         net_state = net_state.reshape(len(state), -1, net_state.shape[-1])  # batch_size * num_nodes * embedding_dim
 
-        sfc_state, source_dest_node_pair, reliability_requirement = utils.reshape_state_batch(sfc_state, source_dest_node_pair, reliability_requirement, self.vnf_state_dim, self.max_sfc_length)
+        sfc_state, source_dest_node_pair, reliability_requirement = utils.reshape_sfc_state_batch(sfc_state, source_dest_node_pair, reliability_requirement, self.vnf_state_dim, self.max_sfc_length)
 
         source_dest_node_pair = self.node_embed(source_dest_node_pair.to(torch.long))  # batch_size * 2 * vnf_state_dim
         reliability_requirement = self.reliability_fc(reliability_requirement)  # batch_size * 1 * vnf_state_dim
@@ -120,5 +103,40 @@ class DecoderActor(nn.Module):
         self._last_hidden_state = hidden_state
 
         logits = self.mlp(net_state).permute(0, 2, 1)  # batch_size * max_sfc_length * num_nodes
+        probs = F.softmax(logits, dim=-1)
+        return logits, probs
+
+class StateNetworkActor(nn.Module):
+    def __init__(self, node_state_dim, vnf_state_dim, num_nodes, max_sfc_length):
+        super().__init__()
+        self.num_nodes = num_nodes
+        self.state_network = StateNetwork(node_state_dim, vnf_state_dim, num_nodes, max_sfc_length)
+
+    def forward(self, state):
+        state_attention = self.state_network(state)
+        net_tokens = state_attention[:, :self.num_nodes, :] # batch_size * num_nodes * hidden_dim
+        sfc_tokens = state_attention[:, self.num_nodes:, :] # batch_size * (max_sfc_length + 2 + 1) * hidden_dim
+        # [source_node_token, vnf_tokens, dest_node_token, reliability_token]
+        vnf_tokens = sfc_tokens[:, 1:-2, :] # batch_size * max_sfc_length * hidden_dim
+
+        logits = torch.matmul(vnf_tokens, net_tokens.transpose(1, 2))   # batch_size * max_sfc_length * num_nodes
+        probs = F.softmax(logits, dim=-1)
+        return logits, probs
+
+class ACEDActor(nn.Module):
+    def __init__(self, node_state_dim, vnf_state_dim, num_nodes, max_sfc_length, embedding_dim=64, hidden_dim=512):
+        super().__init__()
+        self.num_nodes = num_nodes
+        self.state_network = ACEDStateNetwork(node_state_dim, vnf_state_dim, num_nodes, max_sfc_length, embedding_dim)
+        self.hidden_layer_1 = nn.Linear(embedding_dim, hidden_dim)
+        self.hidden_layer_2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc = nn.Linear(hidden_dim, num_nodes)
+
+    def forward(self, state):
+        state = self.state_network(state)   # batch_size * max_sfc_length * embedding_dim
+        state = self.hidden_layer_1(state)  # batch_size * max_sfc_length * hidden_dim
+        state = F.leaky_relu(state)
+        state = self.hidden_layer_2(state)  # batch_size * max_sfc_length * hidden_dim
+        logits = self.fc(state) # batch_size * max_sfc_length * num_nodes
         probs = F.softmax(logits, dim=-1)
         return logits, probs

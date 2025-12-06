@@ -15,8 +15,8 @@ def unpack_state(state):
 
     return net_state, sfc_state, source_dest_node_pair, reliability_requirement
 
-# reshape state into batch view
-def reshape_state_batch(sfc_state, source_dest_node_pair, reliability_requirement, vnf_state_dim, max_sfc_length):
+# reshape sfc state into batch view
+def reshape_sfc_state_batch(sfc_state, source_dest_node_pair, reliability_requirement, vnf_state_dim, max_sfc_length):
     batch_size = sfc_state.shape[0]
     sfc_state = sfc_state.view(batch_size, max_sfc_length, vnf_state_dim)
     source_dest_node_pair = source_dest_node_pair.view(batch_size, 2)
