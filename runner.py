@@ -161,7 +161,7 @@ class ExperimentRunner:
 
     def evaluate(self):
         if not self.agent_list:
-            tqdm.write("No agent selected. Skipping evaluation.")
+            tqdm.write("No agent selected. Skipping agent evaluation.")
             return
 
         print('-' * 30 + ' Evaluation Start' + '-' * 30)

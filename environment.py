@@ -47,7 +47,7 @@ class Environment:
         self.p_unit = 1   # power consumption per unit node resource
         self.p_link = 0.05  # power consumption per link length
 
-        self.path_penalty = 200  # a penalty factor added to reward if there is no path found between two vnf
+        self.path_penalty = 25  # a penalty factor added to reward if there is no path found between two vnf
 
         # update per episode
         self.node_used = np.zeros(self.num_nodes)
@@ -78,12 +78,12 @@ class Environment:
         self.reward = 0
         self.sfc_placed_num = 0
 
-        self.lambda_placement = 1
+        self.lambda_placement = 5
         self.lambda_power = 1
-        self.lambda_capacity = 1
-        self.lambda_bandwidth = 1
-        self.lambda_latency = 1
-        self.lambda_reliability = 1
+        self.lambda_capacity = 0.5
+        self.lambda_bandwidth = 0.5
+        self.lambda_latency = 0.25
+        self.lambda_reliability = 0.25
 
         # record max reward to normalization
         self.placement_reward_window = deque(maxlen=cfg.episode * cfg.batch_size)
@@ -226,11 +226,11 @@ class Environment:
         max_exceeded_bandwidth = max(self.exceeded_bandwidth_window) if self.exceeded_bandwidth_window else 1.0
         max_exceeded_latency = max(self.exceeded_latency_window) if self.exceeded_latency_window else 1.0
 
-        self.placement_reward = self.lambda_placement * self.placement_reward / (max_placement_reward + 1e-6)
-        self.power_consumption = self.lambda_power * self.power_consumption / (max_power_consumption + 1e-6)
-        self.exceeded_capacity = self.lambda_capacity * self.exceeded_capacity / (max_exceeded_capacity + 1e-6)
-        self.exceeded_bandwidth = self.lambda_bandwidth * self.exceeded_bandwidth / (max_exceeded_bandwidth + 1e-6)
-        self.exceeded_latency = self.lambda_latency * self.exceeded_latency / (max_exceeded_latency + 1e-6)
+        self.placement_reward = self.lambda_placement * np.clip(self.placement_reward / (max_placement_reward + 1e-6), -1.0, 1.0)
+        self.power_consumption = self.lambda_power * np.clip(self.power_consumption / (max_power_consumption + 1e-6), -1.0, 1.0)
+        self.exceeded_capacity = self.lambda_capacity * np.clip(self.exceeded_capacity / (max_exceeded_capacity + 1e-6), -1.0, 1.0)
+        self.exceeded_bandwidth = self.lambda_bandwidth * np.clip(self.exceeded_bandwidth / (max_exceeded_bandwidth + 1e-6), -1.0, 1.0)
+        self.exceeded_latency = self.lambda_latency * np.clip(self.exceeded_latency / (max_exceeded_latency + 1e-6), -1.0, 1.0)
 
         self.exceeded_penalty =  self.exceeded_capacity + self.exceeded_bandwidth + self.exceeded_latency
         self.reliability_difference = self.lambda_reliability * (reliability_requirement - self.reliability)

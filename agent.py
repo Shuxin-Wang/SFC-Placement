@@ -403,7 +403,8 @@ class PPO(nn.Module):
                 placement = action[0][:len(sfc_list[i])].squeeze(0).to(dtype=torch.int32).tolist() # masked placement
                 sfc = source_dest_node_pair.to(dtype=torch.int32).tolist() + sfc_list[i] + reliability_requirement.tolist()
                 next_node_states, reward = env.step(sfc, placement)
-                print(env.placement_reward, env.power_consumption, env.exceeded_capacity, env.exceeded_bandwidth, env.exceeded_latency, env.reliability_difference)
+                # print(env.reward, env.placement_reward, env.power_consumption, env.exceeded_capacity, env.exceeded_bandwidth, env.exceeded_latency, env.reliability_difference)
+                # print(env.placement_reward - env.power_consumption - env.exceeded_penalty - env.reliability_difference)
                 # print(env.reward)
                 episode_reward += reward
 
@@ -854,7 +855,7 @@ class ACED(nn.Module):
             all_advantages.append(advantages)
             all_targets.append(targets)
 
-        all_actions = torch.cat(all_actions, dim=0).view(batch_size, -1) # batch_size * max_sfc_length
+        all_actions = torch.cat(all_actions, dim=0).view(int(batch_size), -1) # batch_size * max_sfc_length
         all_advantages = torch.cat(all_advantages, dim=0).unsqueeze(1)  # batch_size * 1
         all_targets = torch.cat(all_targets, dim=0).unsqueeze(1)    # batch_size * 1
 

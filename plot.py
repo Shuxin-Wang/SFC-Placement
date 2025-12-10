@@ -142,14 +142,21 @@ def show_results(runner):
 
 if __name__ == '__main__':
     agent_name_list = [
-        'NCO',
-        'EnhancedNCO',
-        'DRLSFCP',
+        # 'NCO',
+        # 'EnhancedNCO',
+        # 'DRLSFCP',
         'PPO',
-        'ACED'
+        # 'ACED'
         ]
 
+    heuristic_name_list = [
+        # 'Greedy',
+        'FirstFit'
+        ]
+
+    result_list = agent_name_list + heuristic_name_list
+
     # show_train_result('Cogentco', 'save/result/Cogentco/train', agent_name_list)
-    # show_evaluate_result('Cogentco', 'save/result/Cogentco/evaluate', agent_name_list)
-    show_train_result('Chinanet', 'save/result/Chinanet/train', agent_name_list)
-    # show_evaluate_result('Chinanet', 'save/result/Chinanet/evaluate', agent_name_list)
+    show_evaluate_result('Cogentco', 'save/result/Cogentco/evaluate', result_list)
+    # show_train_result('Chinanet', 'save/result/Chinanet/train', agent_name_list)
+    # show_evaluate_result('Chinanet', 'save/result/Chinanet/evaluate', result_list)
