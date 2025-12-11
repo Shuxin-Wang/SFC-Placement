@@ -77,19 +77,12 @@ class Environment:
         self.reward = 0
         self.sfc_placed_num = 0
 
-        self.lambda_placement = 5
+        self.lambda_placement = 20
         self.lambda_power = 1
         self.lambda_capacity = 0.5
         self.lambda_bandwidth = 0.5
         self.lambda_latency = 0.25
-        self.lambda_reliability = 0.25
-
-        # record max reward to normalization
-        self.placement_reward_window = deque(maxlen=cfg.episode * cfg.batch_size)
-        self.power_consumption_window = deque(maxlen=cfg.episode * cfg.batch_size)
-        self.exceeded_capacity_window = deque(maxlen=cfg.episode * cfg.batch_size)
-        self.exceeded_bandwidth_window = deque(maxlen=cfg.episode * cfg.batch_size)
-        self.exceeded_latency_window = deque(maxlen=cfg.episode * cfg.batch_size)
+        self.lambda_reliability = 1250
 
         # record episode data
         self.placement_reward_list = []
@@ -217,28 +210,16 @@ class Environment:
         self.exceeded_link_bandwidth_list.append(self.exceeded_bandwidth)
         self.sfc_latency_list.append(self.sfc_latency)
 
-        # normalize reward with a slide window
-        self.placement_reward_window.append(self.placement_reward)
-        self.power_consumption_window.append(self.power_consumption)
-        self.exceeded_capacity_window.append(self.exceeded_capacity)
-        self.exceeded_bandwidth_window.append(self.exceeded_bandwidth)
-        self.exceeded_latency_window.append(self.exceeded_latency)
+        # reward scaling
+        self.placement_reward = self.placement_reward * 0.1
+        self.power_consumption = self.power_consumption * 0.2
+        self.exceeded_capacity = self.exceeded_capacity * 0.1
+        self.exceeded_bandwidth = self.exceeded_bandwidth * 0.002
+        self.exceeded_latency = self.exceeded_latency * 0.025
 
-        max_placement_reward = max(self.placement_reward_window) if self.placement_reward_window else 1.0
-        max_power_consumption = max(self.power_consumption_window) if self.power_consumption_window else 1.0
-        max_exceeded_capacity = max(self.exceeded_capacity_window) if self.exceeded_capacity_window else 1.0
-        max_exceeded_bandwidth = max(self.exceeded_bandwidth_window) if self.exceeded_bandwidth_window else 1.0
-        max_exceeded_latency = max(self.exceeded_latency_window) if self.exceeded_latency_window else 1.0
-
-        self.placement_reward =  np.tanh(self.placement_reward / (max_placement_reward + 1e-6))
-        self.power_consumption =  np.tanh(self.power_consumption / (max_power_consumption + 1e-6))
-        self.exceeded_capacity =  np.tanh(self.exceeded_capacity / (max_exceeded_capacity + 1e-6))
-        self.exceeded_bandwidth = np.tanh(self.exceeded_bandwidth / (max_exceeded_bandwidth + 1e-6))
-        self.exceeded_latency = np.tanh(self.exceeded_latency / (max_exceeded_latency + 1e-6))
-
-        exceeded_penalty =  (self.lambda_capacity * self.exceeded_capacity
-                                  + self.lambda_bandwidth * self.exceeded_bandwidth
-                                  + self.lambda_latency * self.exceeded_latency)
+        exceeded_penalty = (self.lambda_capacity * self.exceeded_capacity
+                            + self.lambda_bandwidth * self.exceeded_bandwidth
+                            + self.lambda_latency * self.exceeded_latency)
 
         self.reliability_difference = self.lambda_reliability * (reliability_requirement - self.reliability)
 
@@ -302,9 +283,9 @@ class Environment:
 
     def step(self, sfc, placement):
         source_dest_node_pair = sfc[:2]  # sfc[0:1] is the source dest node pair
+        reliability_requirement = sfc[-1]  # sfc[-1] is the reliability requirement
         sfc = sfc[2:-1]   # sfc[2:] is the sfc
-        reliability_requirement = sfc[-1]   # sfc[-1] is the reliability requirement
-        # print(placement)
+
         self.clear_sfc()
 
         self.vnf_placement = np.zeros(len(sfc), dtype='int32')
@@ -368,12 +349,6 @@ class Environment:
         self.reliability_difference = 0
         self.reward = 0
         self.sfc_placed_num = 0
-
-        self.placement_reward_window.clear()
-        self.power_consumption_window.clear()
-        self.exceeded_capacity_window.clear()
-        self.exceeded_bandwidth_window.clear()
-        self.exceeded_latency_window.clear()
 
         self.placement_reward_list.clear()
         self.power_consumption_list.clear()
