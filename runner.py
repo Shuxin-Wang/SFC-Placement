@@ -45,7 +45,19 @@ class ExperimentRunner:
         warnings.filterwarnings("ignore")
         
     def set_model(self):
-        if self.model == 'NCO':
+        if self.model == 'all':
+            self.agent_list = [
+                NCO(self.cfg, self.env, self.sfc_generator, self.device),
+                EnhancedNCO(self.cfg, self.env, self.sfc_generator, self.device),
+                DRLSFCP(self.cfg, self.env, self.sfc_generator, self.device),
+                GTMSFC(self.cfg, self.env, self.sfc_generator, self.device),
+                ACED(self.cfg, self.env, self.sfc_generator, self.device)
+            ]
+            self.heuristic_list = [
+                Greedy(self.cfg, self.env, self.sfc_generator),
+                FirstFit(self.cfg, self.env, self.sfc_generator)
+            ]
+        elif self.model == 'NCO':
             self.agent_list = [
                 NCO(self.cfg, self.env, self.sfc_generator, self.device)
             ]
