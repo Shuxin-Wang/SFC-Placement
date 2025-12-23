@@ -101,7 +101,7 @@ def show_results(runner):
 if __name__ == '__main__':
     agent_name_list = [
         'NCO',
-        'EnhancedNCO',
+        'GTMNCO',
         'DRLSFCP',
         'GTMSFC',
         'ACED'

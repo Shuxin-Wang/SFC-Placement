@@ -8,7 +8,7 @@ import warnings
 import plot
 from environment import Environment
 from sfc import SFCBatchGenerator
-from agent import NCO, DRLSFCP, EnhancedNCO, GTMSFC, ACED
+from agent import NCO, DRLSFCP, GTMNCO, GTMSFC, ACED
 from heuristic import Greedy, FirstFit
 
 class ExperimentRunner:
@@ -48,7 +48,7 @@ class ExperimentRunner:
         if self.model == 'all':
             self.agent_list = [
                 NCO(self.cfg, self.env, self.sfc_generator, self.device),
-                EnhancedNCO(self.cfg, self.env, self.sfc_generator, self.device),
+                GTMNCO(self.cfg, self.env, self.sfc_generator, self.device),
                 DRLSFCP(self.cfg, self.env, self.sfc_generator, self.device),
                 GTMSFC(self.cfg, self.env, self.sfc_generator, self.device),
                 ACED(self.cfg, self.env, self.sfc_generator, self.device)
@@ -61,9 +61,9 @@ class ExperimentRunner:
             self.agent_list = [
                 NCO(self.cfg, self.env, self.sfc_generator, self.device)
             ]
-        elif self.model == 'EnhancedNCO':
+        elif self.model == 'GTMNCO':
             self.agent_list = [
-                EnhancedNCO(self.cfg, self.env, self.sfc_generator, self.device)
+                GTMNCO(self.cfg, self.env, self.sfc_generator, self.device)
             ]
         elif self.model == 'DRLSFCP':
             self.agent_list = [

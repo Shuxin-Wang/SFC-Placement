@@ -17,7 +17,7 @@ class Config():
         parser.add_argument('--num_vnf_types', type=int, default=8, help='number of VNF types, 1-8')
 
         parser.add_argument('--graph', type=str, default='Chinanet', help='graph name: Chinanet / Cogentco')
-        parser.add_argument('--model', type=str, default='all', help='choose DRL model or heuristics: all / NCO / EnhancedNCO / DRLSFCP / GTMSFC / ACED / Greedy / FirstFit')
+        parser.add_argument('--model', type=str, default='all', help='choose DRL model or heuristics: all / NCO / GTMNCO / DRLSFCP / GTMSFC / ACED / Greedy / FirstFit')
         parser.add_argument('--train', type=str2bool, default=False, help='train model')
         parser.add_argument('--evaluate', type=str2bool, default=True, help='evaluate model')
         parser.add_argument('--save_model', type=str2bool, default=True, help='save model')
